@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Format Reaper</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="app">
+  <div class="titlebar"></div>
+  <div class="main-layout">
+
+    <nav class="sidebar">
+      <div class="app-title">
+        <div class="app-title-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="5" width="18" height="14" rx="2"/>
+            <path d="M10 9l5 3-5 3z" fill="currentColor"/>
+            <path d="M3 11h18"/>
+          </svg>
+        </div>
+        <span>Format Reaper</span>
+      </div>
+      <div class="nav-item active" data-panel="convert">
+        <svg viewBox="0 0 16 16"><path d="M3 8h7M7 5l3 3-3 3M13 3v10"/></svg>
+        Convert
+      </div>
+      <div class="nav-item" data-panel="history">
+        <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4l2.5 1.5"/></svg>
+        History
+      </div>
+      <div class="nav-item" data-panel="settings">
+        <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>
+        Settings
+      </div>
+      <div class="nav-item" data-panel="debug" id="navDebug" style="display:none">
+        <svg viewBox="0 0 16 16"><path d="M4 2l1 3M12 2l-1 3M3 7h10M5 7v4a3 3 0 006 0V7M2 10h2M12 10h2"/></svg>
+        Debug
+      </div>
+      <div class="sidebar-bottom"></div>
+    </nav>
+
+    <div class="panels">
+
+      <!-- Convert Panel -->
+      <div id="panel-convert" class="panel active">
+        <div class="add-bar">
+          <button class="btn btn-accent" id="addFilesBtn">Add Files</button>
+          <button class="btn btn-ghost" id="addFolderBtn" title="Add all media files from a folder">Add Folder</button>
+          <div class="add-bar-hint">or drop files anywhere in the window</div>
+          <div class="spacer"></div>
+          <span class="ffmpeg-status" id="ffmpegStatus"></span>
+        </div>
+
+        <div class="preset-row" id="presetRow">
+          <span class="preset-label">Preset:</span>
+          <div class="preset-pill active" data-preset="iphone">iPhone 4K HEVC</div>
+          <div class="preset-pill" data-preset="iphone-1080">iPhone 1080p</div>
+          <div class="preset-pill" data-preset="mp4-h264">MP4 H.264</div>
+          <div class="preset-pill" data-preset="webm">WebM VP9</div>
+          <div class="preset-pill" data-preset="audio-mp3">Audio MP3</div>
+          <div class="preset-pill" data-preset="lossless">Lossless</div>
+          <div class="preset-pill" data-preset="custom">Custom</div>
+        </div>
+
+        <div class="convert-form">
+          <div class="row">
+            <div class="form-group">
+              <label>Output Format</label>
+              <select id="formatSelect">
+                <optgroup label="Video">
+                  <option value="mp4">MP4</option>
+                  <option value="mov">MOV (Apple)</option>
+                  <option value="mkv">MKV</option>
+                  <option value="webm">WebM</option>
+                  <option value="avi">AVI</option>
+                  <option value="gif">GIF</option>
+                </optgroup>
+                <optgroup label="Audio">
+                  <option value="mp3">MP3</option>
+                  <option value="m4a">M4A (AAC)</option>
+                  <option value="wav">WAV</option>
+                  <option value="flac">FLAC</option>
+                  <option value="opus">Opus</option>
+                  <option value="ogg">OGG</option>
+                </optgroup>
+                <optgroup label="Image">
+                  <option value="jpg">JPG</option>
+                  <option value="png">PNG</option>
+                  <option value="webp">WebP</option>
+                  <option value="avif">AVIF</option>
+                  <option value="tiff">TIFF</option>
+                  <option value="bmp">BMP</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="form-group form-group-grow">
+              <label>Output Folder</label>
+              <div class="form-row">
+                <input type="text" id="outputDir" placeholder="C:\..." />
+                <button class="btn btn-ghost btn-sm" id="browseDirBtn">Browse</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="row" id="videoOptionsRow">
+            <div class="form-group">
+              <label>Video Codec</label>
+              <select id="videoCodec">
+                <option value="auto">Auto</option>
+                <option value="libx264">H.264 (libx264)</option>
+                <option value="libx265">H.265 / HEVC (libx265)</option>
+                <option value="libvpx-vp9">VP9</option>
+                <option value="libaom-av1">AV1</option>
+                <option value="copy">Copy (no re-encode)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Quality (CRF)
+                <span class="setting-tooltip" data-tip="Constant Rate Factor. Lower = higher quality, larger file. Range: 0 (lossless) to 51 (worst). 18 is visually lossless, 23 is default, 28 is acceptable.">?</span>
+              </label>
+              <input type="number" id="crf" value="20" min="0" max="51" />
+            </div>
+            <div class="form-group">
+              <label>Bitrate (kbps)
+                <span class="setting-tooltip" data-tip="Target video bitrate in kilobits per second. 0 = use CRF (recommended). Higher = better quality, larger file.">?</span>
+              </label>
+              <input type="number" id="vbitrate" value="0" min="0" />
+            </div>
+            <div class="form-group">
+              <label>Preset</label>
+              <select id="preset">
+                <option value="ultrafast">Ultrafast</option>
+                <option value="superfast">Superfast</option>
+                <option value="veryfast">Veryfast</option>
+                <option value="faster">Faster</option>
+                <option value="fast">Fast</option>
+                <option value="medium" selected>Medium</option>
+                <option value="slow">Slow</option>
+                <option value="slower">Slower</option>
+                <option value="veryslow">Veryslow</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row" id="videoOptionsRow2">
+            <div class="form-group">
+              <label>Resolution</label>
+              <select id="resolution">
+                <option value="keep">Keep original</option>
+                <option value="iphone-4k">4K (3840x2160)</option>
+                <option value="1440p">1440p</option>
+                <option value="1080p">1080p</option>
+                <option value="720p">720p</option>
+                <option value="480p">480p</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Frame Rate</label>
+              <select id="fps">
+                <option value="0">Keep original</option>
+                <option value="60">60 fps</option>
+                <option value="30">30 fps</option>
+                <option value="24">24 fps</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Audio Codec</label>
+              <select id="audioCodec">
+                <option value="auto">Auto</option>
+                <option value="aac">AAC</option>
+                <option value="libopus">Opus</option>
+                <option value="libmp3lame">MP3</option>
+                <option value="copy">Copy</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Audio Bitrate (kbps)</label>
+              <input type="number" id="abitrate" value="192" min="32" max="512" />
+            </div>
+          </div>
+
+          <div class="row" id="imageOptionsRow" style="display:none;">
+            <div class="form-group">
+              <label>Image Quality
+                <span class="setting-tooltip" data-tip="Quality level for lossy image formats. 100 = near-lossless, 1 = lowest. 85-95 is the sweet spot for JPG/WebP.">?</span>
+              </label>
+              <input type="number" id="imageQuality" value="90" min="1" max="100" />
+            </div>
+            <div class="form-group">
+              <label>Resolution</label>
+              <select id="imageResolution">
+                <option value="keep">Keep original</option>
+                <option value="3840x2160">4K (3840x2160)</option>
+                <option value="1920x1080">1080p (1920x1080)</option>
+                <option value="1280x720">720p (1280x720)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row" id="audioOptionsRow" style="display:none;">
+            <div class="form-group">
+              <label>Audio Codec</label>
+              <select id="audioOnlyCodec">
+                <option value="auto">Auto</option>
+                <option value="libmp3lame">MP3</option>
+                <option value="aac">AAC</option>
+                <option value="libopus">Opus</option>
+                <option value="libvorbis">Vorbis</option>
+                <option value="flac">FLAC (lossless)</option>
+                <option value="pcm_s16le">WAV PCM</option>
+                <option value="copy">Copy</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Bitrate (kbps)</label>
+              <input type="number" id="audioOnlyBitrate" value="192" min="32" max="512" />
+            </div>
+          </div>
+
+          <div class="toggle-row">
+            <div class="inline-check" id="losslessToggleWrap">
+              <div class="debug-check" id="losslessCheck"></div>
+              <span>Lossless
+                <span class="setting-tooltip" data-tip="Convert without any quality loss. For video this disables bitrate/CRF and uses true lossless encoding (much larger files). For images, only formats that support lossless (PNG, WebP, AVIF, TIFF) will be perfect.">?</span>
+              </span>
+            </div>
+            <div class="inline-check" id="iphoneToggleWrap">
+              <div class="debug-check on" id="iphoneCheck"></div>
+              <span>iPhone / iPad compatible
+                <span class="setting-tooltip" data-tip="Enforces playable settings on Apple devices: yuv420p pixel format, hvc1 tag for HEVC, and faststart flag so the file streams from anywhere in the timeline. Recommended for AirDrop / Photos.">?</span>
+              </span>
+            </div>
+            <div class="inline-check" id="metadataToggleWrap">
+              <div class="debug-check" id="metadataCheck"></div>
+              <span>Strip metadata
+                <span class="setting-tooltip" data-tip="Remove EXIF, GPS, camera info, encoding tags. Useful before sharing online.">?</span>
+              </span>
+            </div>
+            <div class="inline-check" id="hwToggleWrap">
+              <div class="debug-check on" id="hwCheck"></div>
+              <span>Hardware acceleration
+                <span class="setting-tooltip" data-tip="Use GPU encoding when available (NVENC / QSV / VideoToolbox / VAAPI / AMF). Much faster, slightly larger files at the same quality.">?</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button class="btn btn-accent" id="convertAllBtn">Convert All</button>
+          <button class="btn btn-ghost btn-sm" id="cancelAllBtn">Cancel All</button>
+          <button class="btn btn-ghost btn-sm" id="clearCompletedBtn">Clear Completed</button>
+          <div class="spacer"></div>
+          <span class="status-text" id="globalStatus"></span>
+        </div>
+
+        <div class="overall-progress" id="overallProgress" style="display:none;">
+          <div class="overall-progress-info">
+            <span class="overall-progress-text" id="overallText"></span>
+            <span class="overall-progress-pct" id="overallPct"></span>
+          </div>
+          <div class="overall-progress-track"><div class="overall-progress-bar" id="overallBar"></div></div>
+        </div>
+
+        <div class="download-list" id="jobList">
+          <div class="empty-state" id="emptyState">
+            <div class="icon">&#127916;</div>
+            <p>Drop files here or click <strong>Add Files</strong> to begin converting</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- History Panel -->
+      <div id="panel-history" class="panel">
+        <div class="controls">
+          <input class="search-input" type="text" id="historySearch" placeholder="Search history..." />
+          <select id="historySort">
+            <option value="date-desc">Newest first</option>
+            <option value="date-asc">Oldest first</option>
+            <option value="size-desc">Largest first</option>
+            <option value="size-asc">Smallest first</option>
+            <option value="name-asc">Name A-Z</option>
+            <option value="name-desc">Name Z-A</option>
+          </select>
+          <div class="spacer"></div>
+          <span class="status-text" id="historyCount"></span>
+          <button class="btn btn-danger btn-sm" id="historyClearBtn">Clear History</button>
+        </div>
+        <div class="history-filters" id="historyFilters">
+          <div class="history-filter-btn active" data-status="Completed">Completed</div>
+          <div class="history-filter-btn active" data-status="Failed">Failed</div>
+          <div class="history-filter-btn active" data-status="Cancelled">Cancelled</div>
+        </div>
+        <div class="download-list" id="historyList">
+          <div class="empty-state" id="historyEmpty">
+            <div class="icon">&#128218;</div>
+            <p>No conversion history yet</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings Panel -->
+      <div id="panel-settings" class="panel">
+        <div class="settings-form">
+          <div class="setting-group">
+            <label>Default Output Folder</label>
+            <div class="setting-row">
+              <input type="text" id="defaultOutputDir" placeholder="C:\Users\You\Videos" style="flex:1" />
+              <button class="btn btn-ghost" id="browseDefaultBtn">Browse</button>
+            </div>
+          </div>
+          <div class="setting-group">
+            <label>Output Naming</label>
+            <div class="setting-row">
+              <select id="namingMode">
+                <option value="suffix">Original name + format suffix (video_h265.mp4)</option>
+                <option value="same">Same name (overwrite warning)</option>
+                <option value="timestamp">Original name + timestamp</option>
+              </select>
+            </div>
+          </div>
+          <div class="setting-group">
+            <label>After Conversion</label>
+            <div class="setting-row" style="cursor:pointer;" id="autoClearToggleSettings">
+              <div class="debug-check" id="autoClearCheckSettings"></div>
+              <span style="font-size:13px;color:var(--text-dim);">Auto-clear completed conversions from list</span>
+            </div>
+            <div class="setting-row" style="cursor:pointer;margin-top:4px;" id="openFolderToggleSettings">
+              <div class="debug-check" id="openFolderCheckSettings"></div>
+              <span style="font-size:13px;color:var(--text-dim);">Reveal output file when single conversion finishes</span>
+            </div>
+            <div class="setting-row" style="cursor:pointer;margin-top:4px;" id="overwriteToggleSettings">
+              <div class="debug-check" id="overwriteCheckSettings"></div>
+              <span style="font-size:13px;color:var(--text-dim);">Overwrite output file if it already exists (otherwise rename with -1, -2)</span>
+            </div>
+          </div>
+          <div class="setting-group">
+            <label>Max Concurrent Conversions
+              <span class="setting-tooltip" data-tip="How many files convert in parallel. Higher = faster batch, but each one is slower. For hardware-accelerated encoding 1-2 is usually best. CPU encoding can handle more.">?</span>
+            </label>
+            <div class="setting-row">
+              <input type="number" id="maxConcurrent" value="1" min="1" max="8" />
+            </div>
+          </div>
+          <div class="setting-group">
+            <label>Default Hardware Acceleration</label>
+            <div class="setting-row">
+              <select id="defaultHwAccel">
+                <option value="auto">Auto (use first available)</option>
+                <option value="none">None (CPU only)</option>
+                <option value="nvenc">NVIDIA NVENC</option>
+                <option value="qsv">Intel QuickSync</option>
+                <option value="videotoolbox">Apple VideoToolbox</option>
+                <option value="vaapi">VA-API (Linux)</option>
+                <option value="amf">AMD AMF</option>
+              </select>
+            </div>
+            <div class="setting-row" id="hwDetectedRow">
+              <span style="font-size:11px;color:var(--text-dim);font-family:var(--mono);" id="hwDetected">Detecting available encoders...</span>
+            </div>
+          </div>
+          <div class="setting-group">
+            <label>FFmpeg</label>
+            <div class="setting-row" id="ffmpegInfoRow">
+              <span style="font-size:11px;color:var(--text-dim);font-family:var(--mono);" id="ffmpegInfo">Checking...</span>
+            </div>
+          </div>
+          <div style="height:1px;background:var(--border);margin:8px 0;"></div>
+          <div class="setting-group">
+            <div class="setting-row" style="cursor:pointer;" id="debugToggleWrap">
+              <div class="debug-check" id="debugCheck"></div>
+              <span style="font-size:13px;color:var(--text-dim);">Enable Debug Mode
+                <span class="setting-tooltip" data-tip="Adds a Debug panel to the sidebar with real-time logs of every FFmpeg invocation, file probe, and conversion event. The full command used for each job is logged so you can rerun it manually.">?</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Debug Panel -->
+      <div id="panel-debug" class="panel">
+        <div class="debug-toolbar">
+          <div class="debug-filters">
+            <div class="debug-filter-btn active" data-level="info">INFO</div>
+            <div class="debug-filter-btn active" data-level="warn">WARN</div>
+            <div class="debug-filter-btn active" data-level="error">ERROR</div>
+            <div class="debug-filter-btn active" data-level="event">EVENT</div>
+            <div class="debug-filter-btn active" data-level="ffmpeg">FFMPEG</div>
+          </div>
+          <input class="search-input" type="text" id="debugSearch" placeholder="Search logs..." style="width:160px;font-size:11px;padding:4px 8px;" />
+          <div class="spacer"></div>
+          <div class="export-wrap">
+            <button class="btn btn-ghost btn-sm" id="debugExportBtn">Export</button>
+            <div class="export-menu" id="debugExportMenu">
+              <button data-format="csv">Export as CSV</button>
+              <button data-format="txt">Export as TXT</button>
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="debugClearBtn">Clear</button>
+        </div>
+        <div class="debug-log" id="debugLog">
+          <div class="debug-empty">Debug mode enabled. Logs will appear here in real-time.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="global-footer">
+    <div class="footer-stats">
+      <span id="footerActive">0 active</span>
+      <span id="footerCompleted">0 completed</span>
+      <span id="footerSaved"></span>
+    </div>
+    <div class="footer-links">
+      <span>Made by</span>
+      <a id="linkEerie" href="#">EERIE</a>
+      <span class="sep">|</span>
+      <a id="linkCoffee" href="#">Support This Project</a>
+      <span class="sep">|</span>
+      <a id="linkIssue" href="#">Report Issue</a>
+      <span class="sep">|</span>
+      <a id="linkFeedback" href="#">Suggest Feature</a>
+    </div>
+  </div>
+</div>
+
+<div id="dropOverlay" class="drop-overlay">
+  <div class="drop-overlay-inner">
+    <div class="drop-icon">&#11015;</div>
+    <div class="drop-title">Drop files to convert</div>
+    <div class="drop-sub">Video, audio and image files supported</div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+<script src="main.js" defer></script>
+</body>
+</html>

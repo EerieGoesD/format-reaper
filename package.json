@@ -1,0 +1,17 @@
+{
+  "name": "format-reaper",
+  "version": "1.0.0",
+  "description": "Image and video format converter powered by FFmpeg",
+  "author": "EERIE",
+  "scripts": {
+    "dev": "npx tauri dev",
+    "build": "npx tauri build",
+    "build:nsis": "npx tauri build --bundles nsis",
+    "build:appx": "npx tauri build --bundles appx",
+    "build:dmg": "npx tauri build --bundles dmg",
+    "build:appimage": "npx tauri build --bundles appimage"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
