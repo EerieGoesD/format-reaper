@@ -28,6 +28,7 @@ let formState = {
   metadata: false,
   hw: true,
   deinterlace: false,
+  noAudio: false,
 };
 
 const debugFilters = { info: true, warn: true, error: true, event: true, ffmpeg: true };
@@ -241,6 +242,7 @@ bindToggle('iphoneToggleWrap', 'iphoneCheck', 'iphone');
 bindToggle('metadataToggleWrap', 'metadataCheck', 'metadata');
 bindToggle('hwToggleWrap', 'hwCheck', 'hw');
 bindToggle('deinterlaceToggleWrap', 'deinterlaceCheck', 'deinterlace');
+bindToggle('noAudioToggleWrap', 'noAudioCheck', 'noAudio');
 
 // Settings toggles
 function bindSettingToggle(wrapId, checkId, key, persistKey) {
@@ -310,6 +312,7 @@ function snapshotForm() {
     metadata: !!formState.metadata,
     hw: !!formState.hw,
     deinterlace: !!formState.deinterlace,
+    noAudio: !!formState.noAudio,
   };
 }
 
@@ -337,6 +340,7 @@ function applyPresetData(data) {
   if (data.metadata != null) formState.metadata = !!data.metadata;
   if (data.hw != null) formState.hw = !!data.hw;
   if (data.deinterlace != null) formState.deinterlace = !!data.deinterlace;
+  if (data.noAudio != null) formState.noAudio = !!data.noAudio;
   refreshToggles();
   onFormChange();
 }
@@ -453,6 +457,24 @@ function refreshToggles() {
   $('#metadataCheck').classList.toggle('on', formState.metadata);
   $('#hwCheck').classList.toggle('on', formState.hw);
   $('#deinterlaceCheck').classList.toggle('on', formState.deinterlace);
+  $('#noAudioCheck').classList.toggle('on', formState.noAudio);
+  applyAudioDisabledState();
+}
+
+function applyAudioDisabledState() {
+  const off = !!formState.noAudio;
+  const fmt = formatSelect.value;
+  const kind = formatKind(fmt);
+  // Video-row audio fields
+  const aCodecGroup = audioCodec.closest('.form-group');
+  const aBitrateGroup = abitrateInput.closest('.form-group');
+  if (aCodecGroup) aCodecGroup.classList.toggle('disabled', off && kind === 'video');
+  if (aBitrateGroup) aBitrateGroup.classList.toggle('disabled', off && kind === 'video');
+  // Audio-only fields
+  const aoCodecGroup = audioOnlyCodec.closest('.form-group');
+  const aoBitrateGroup = audioOnlyBitrate.closest('.form-group');
+  if (aoCodecGroup) aoCodecGroup.classList.toggle('disabled', off && kind === 'audio');
+  if (aoBitrateGroup) aoBitrateGroup.classList.toggle('disabled', off && kind === 'audio');
 }
 
 function formatKind(fmt) {
@@ -469,6 +491,7 @@ function onFormChange() {
   videoOptionsRow2.style.display = kind === 'video' ? 'flex' : 'none';
   imageOptionsRow.style.display = kind === 'image' ? 'flex' : 'none';
   audioOptionsRow.style.display = kind === 'audio' ? 'flex' : 'none';
+  applyAudioDisabledState();
 }
 formatSelect.addEventListener('change', () => { onFormChange(); });
 videoCodec.addEventListener('change', onFormChange);
@@ -626,6 +649,7 @@ function buildOptions(kind) {
     fastStart: true,
     iphoneCompatible: !!formState.iphone,
     deinterlace: !!formState.deinterlace,
+    noAudio: !!formState.noAudio,
   };
 
   if (formState.hw) {
@@ -909,7 +933,19 @@ listen('conversion-progress', (e) => {
     local.commandLogged = true;
   }
   if (j.status === 'Completed') {
-    dlog('event', `Completed: ${local.filename} → ${basename(j.outputPath)} (${fmtBytes(local.outputSize)})`);
+    {
+      const inSz = local.inputSize || 0;
+      const outSz = local.outputSize || 0;
+      let delta = '';
+      if (inSz > 0 && outSz > 0) {
+        const pct = ((outSz - inSz) / inSz) * 100;
+        delta = ` [${pct <= 0 ? '-' : '+'}${Math.abs(pct).toFixed(1)}%]`;
+      }
+      dlog('event', `Completed: ${local.filename} (${fmtBytes(inSz)}) -> ${basename(j.outputPath)} (${fmtBytes(outSz)})${delta}`);
+      if (inSz > 0 && outSz > inSz * 1.5) {
+        dlog('warn', `Output is ${(outSz/inSz).toFixed(1)}x the source - check if Lossless or a very low CRF is enabled.`);
+      }
+    }
     addToHistory(local);
     if (settings.openFolder && jobs.filter(x => x.status === 'Running').length === 0 && jobs.length === 1) {
       invoke('reveal_file', { path: local.outputPath }).catch(() => {});
@@ -1041,6 +1077,22 @@ document.querySelectorAll('.debug-filter-btn').forEach(b => {
 });
 $('#debugSearch').addEventListener('input', renderDebug);
 $('#debugClearBtn').addEventListener('click', () => { debugLogs = []; renderDebug(); });
+$('#debugCopyAllBtn').addEventListener('click', async () => {
+  const search = ($('#debugSearch').value || '').toLowerCase();
+  const filtered = debugLogs.filter(e => debugFilters[e.level] && (!search || e.msg.toLowerCase().includes(search)));
+  if (filtered.length === 0) { toast('Nothing to copy', 'No log entries match the current filters.', 'warn', 2500); return; }
+  const text = filtered.map(l => `[${l.ts}] ${l.level.toUpperCase()} ${l.msg}`).join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = $('#debugCopyAllBtn');
+    const orig = btn.textContent;
+    btn.textContent = `Copied ${filtered.length}`;
+    setTimeout(() => { btn.textContent = orig; }, 1400);
+  } catch (e) {
+    dlog('warn', 'Clipboard write failed: ' + e);
+    toast('Copy failed', String(e), 'warn');
+  }
+});
 $('#debugExportBtn').addEventListener('click', () => {
   $('#debugExportMenu').classList.toggle('open');
 });

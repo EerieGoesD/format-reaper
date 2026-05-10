@@ -36,6 +36,8 @@ pub struct ConversionOptions {
     pub iphone_compatible: bool,
     #[serde(default)]
     pub deinterlace: bool,
+    #[serde(default)]
+    pub no_audio: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -631,7 +633,9 @@ fn build_ffmpeg_args(input: &str, output: &str, opt: &ConversionOptions) -> Vec<
         }
     }
 
-    if acodec == "copy" {
+    if opt.no_audio {
+        args.push("-an".into());
+    } else if acodec == "copy" {
         args.push("-c:a".into());
         args.push("copy".into());
     } else {

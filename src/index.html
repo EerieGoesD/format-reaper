@@ -249,6 +249,12 @@
                 <span class="setting-tooltip" data-tip="Removes the combing artifacts you get from interlaced sources. Enable for MTS / M2TS / MPEG-TS camcorder footage and old DVDs. Adds the yadif filter.">?</span>
               </span>
             </div>
+            <div class="inline-check" id="noAudioToggleWrap">
+              <div class="debug-check" id="noAudioCheck"></div>
+              <span>No audio
+                <span class="setting-tooltip" data-tip="Strip the audio stream from the output. Useful when you want a silent clip or are going to add your own audio later. Disables all audio settings.">?</span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -397,6 +403,7 @@
           </div>
           <input class="search-input" type="text" id="debugSearch" placeholder="Search logs..." style="width:160px;font-size:11px;padding:4px 8px;" />
           <div class="spacer"></div>
+          <button class="btn btn-ghost btn-sm" id="debugCopyAllBtn" title="Copy visible log entries to clipboard">Copy All</button>
           <div class="export-wrap">
             <button class="btn btn-ghost btn-sm" id="debugExportBtn">Export</button>
             <div class="export-menu" id="debugExportMenu">

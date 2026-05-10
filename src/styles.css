@@ -127,6 +127,7 @@ select:focus { border-color: var(--accent); }
 .inline-check { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: var(--text-dim); user-select: none; }
 .inline-check span { color: var(--text-dim); }
 .inline-check:hover span { color: var(--text); }
+.form-group.disabled { opacity: 0.4; pointer-events: none; filter: saturate(0); }
 
 /* Overall progress */
 .overall-progress { padding: 8px 20px 4px; flex-shrink: 0; }
