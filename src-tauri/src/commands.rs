@@ -196,14 +196,150 @@ fn binary_exists(name: &str) -> bool {
     } else {
         name.to_string()
     };
+    let sep = if cfg!(windows) { ';' } else { ':' };
+
+    // 1. Check current process PATH
     if let Ok(path_var) = std::env::var("PATH") {
-        let sep = if cfg!(windows) { ';' } else { ':' };
         for dir in path_var.split(sep) {
+            if dir.is_empty() {
+                continue;
+            }
             let candidate = std::path::PathBuf::from(dir).join(&exe);
             if candidate.is_file() {
                 return true;
             }
         }
     }
+
+    // 2. Windows-only: try known winget Links folder and re-read user PATH from registry,
+    //    since winget edits the user environment registry but does not refresh running processes.
+    #[cfg(windows)]
+    {
+        if let Some(found_dir) = find_windows_fallback(&exe) {
+            // Prepend so future Command::new("ffmpeg") spawns find it without app restart
+            let old = std::env::var("PATH").unwrap_or_default();
+            if !old.split(';').any(|d| d.eq_ignore_ascii_case(&found_dir)) {
+                let new_path = format!("{};{}", found_dir, old);
+                std::env::set_var("PATH", new_path);
+            }
+            return true;
+        }
+    }
+
     false
+}
+
+#[cfg(windows)]
+fn find_windows_fallback(exe: &str) -> Option<String> {
+    // a. winget command-alias shim folder (where Gyan.FFmpeg installs its aliases)
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        let winget_links = std::path::PathBuf::from(&local)
+            .join("Microsoft")
+            .join("WinGet")
+            .join("Links");
+        if winget_links.join(exe).is_file() {
+            return Some(winget_links.to_string_lossy().to_string());
+        }
+    }
+
+    // b. Common manual / Chocolatey install locations
+    let manual_candidates = [
+        r"C:\ProgramData\chocolatey\bin",
+        r"C:\ffmpeg\bin",
+        r"C:\Program Files\ffmpeg\bin",
+    ];
+    for dir in manual_candidates {
+        let p = std::path::PathBuf::from(dir).join(exe);
+        if p.is_file() {
+            return Some(dir.to_string());
+        }
+    }
+
+    // c. Re-read user PATH from the registry (winget edits this, but it isn't propagated to running processes)
+    if let Some(reg_path) = read_user_path_from_registry() {
+        for dir in reg_path.split(';') {
+            if dir.is_empty() {
+                continue;
+            }
+            // Expand %VAR% references
+            let expanded = expand_env_vars(dir);
+            let p = std::path::PathBuf::from(&expanded).join(exe);
+            if p.is_file() {
+                return Some(expanded);
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(windows)]
+fn read_user_path_from_registry() -> Option<String> {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+    let output = Command::new("reg")
+        .args(["query", "HKCU\\Environment", "/v", "Path"])
+        .creation_flags(0x08000000)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    // Output looks like:
+    //
+    // HKEY_CURRENT_USER\Environment
+    //     Path    REG_EXPAND_SZ    C:\...;C:\...
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if let Some(idx) = trimmed.find("REG_") {
+            let after = &trimmed[idx..];
+            // skip past "REG_*_SZ" + whitespace to the value
+            if let Some(val_idx) = after.find(|c: char| c == ' ' || c == '\t').and_then(|i| {
+                after[i..]
+                    .find(|c: char| c != ' ' && c != '\t')
+                    .map(|j| i + j)
+            }) {
+                return Some(after[val_idx..].to_string());
+            }
+        }
+    }
+    None
+}
+
+#[cfg(windows)]
+fn expand_env_vars(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let mut name = String::new();
+            let mut closed = false;
+            while let Some(&nc) = chars.peek() {
+                chars.next();
+                if nc == '%' {
+                    closed = true;
+                    break;
+                }
+                name.push(nc);
+            }
+            if closed {
+                if let Ok(v) = std::env::var(&name) {
+                    out.push_str(&v);
+                    continue;
+                } else {
+                    out.push('%');
+                    out.push_str(&name);
+                    out.push('%');
+                    continue;
+                }
+            } else {
+                out.push('%');
+                out.push_str(&name);
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
