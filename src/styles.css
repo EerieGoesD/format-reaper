@@ -92,9 +92,17 @@ select:focus { border-color: var(--accent); }
 /* Add bar */
 .add-bar { display: flex; align-items: center; gap: 10px; padding: 14px 20px 8px; flex-shrink: 0; flex-wrap: wrap; }
 .add-bar-hint { font-size: 11px; color: var(--text-dim); font-family: var(--mono); letter-spacing: 0.02em; }
-.ffmpeg-status { font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+.ffmpeg-status { font-size: 11px; color: var(--text-dim); font-family: var(--mono); display: inline-flex; align-items: center; gap: 6px; }
 .ffmpeg-status.ok { color: var(--success); }
 .ffmpeg-status.missing { color: var(--danger); }
+.ffmpeg-status a { color: var(--accent-h); text-decoration: none; }
+.ffmpeg-status a:hover { color: #fff; text-decoration: underline; }
+.ffmpeg-refresh { color: var(--text-dim); transition: transform 0.4s ease, color 0.15s; }
+.ffmpeg-refresh:hover { color: var(--accent-h); }
+.ffmpeg-refresh.spinning { transform: rotate(360deg); }
+.ffmpeg-refresh svg { width: 13px; height: 13px; }
+#ffmpegInfo a { color: var(--accent-h); text-decoration: none; }
+#ffmpegInfo a:hover { color: #fff; text-decoration: underline; }
 
 /* Preset row */
 .preset-row { display: flex; align-items: center; gap: 6px; padding: 4px 20px 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border); flex-shrink: 0; }
@@ -288,6 +296,8 @@ select:focus { border-color: var(--accent); }
 .toast-msg { font-family: var(--mono); font-size: 11px; color: var(--text-dim); line-height: 1.5; word-break: break-word; }
 .toast-close { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 14px; padding: 0 2px; flex-shrink: 0; transition: color 0.12s; }
 .toast-close:hover { color: var(--text); }
+.toast-action { background: var(--accent); border: none; color: #fff; cursor: pointer; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; flex-shrink: 0; transition: background 0.15s; align-self: center; }
+.toast-action:hover { background: var(--accent-h); }
 .toast.error { border-color: rgba(239,68,68,0.4); }
 .toast.error .toast-icon { color: var(--danger); }
 .toast.warn { border-color: rgba(234,179,8,0.4); }

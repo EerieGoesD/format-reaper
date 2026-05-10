@@ -51,6 +51,9 @@
           <div class="add-bar-hint">or drop files anywhere in the window</div>
           <div class="spacer"></div>
           <span class="ffmpeg-status" id="ffmpegStatus"></span>
+          <button class="btn-icon ffmpeg-refresh" id="ffmpegRefreshBtn" title="Re-check FFmpeg installation">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2v3h-3"/></svg>
+          </button>
         </div>
 
         <div class="preset-row" id="presetRow">
@@ -363,7 +366,9 @@
           <div class="setting-group">
             <label>FFmpeg</label>
             <div class="setting-row" id="ffmpegInfoRow">
-              <span style="font-size:11px;color:var(--text-dim);font-family:var(--mono);" id="ffmpegInfo">Checking...</span>
+              <span style="font-size:11px;color:var(--text-dim);font-family:var(--mono);flex:1;" id="ffmpegInfo">Checking...</span>
+              <button class="btn btn-ghost btn-sm" id="ffmpegRecheckBtn">Re-check</button>
+              <button class="btn btn-ghost btn-sm" id="ffmpegDownloadBtn">Download</button>
             </div>
           </div>
           <div style="height:1px;background:var(--border);margin:8px 0;"></div>

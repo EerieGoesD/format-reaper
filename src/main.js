@@ -152,22 +152,31 @@ function renderDebug() {
 }
 
 // Toasts
-function toast(title, msg, type = 'info', timeout = 4000) {
+function toast(title, msg, type = 'info', timeout = 4000, action = null) {
   const el = document.createElement('div');
   el.className = 'toast ' + (type === 'error' ? 'error' : type === 'warn' ? 'warn' : type === 'success' ? 'success' : '');
   const icon = type === 'error' ? '⚠' : type === 'warn' ? '⚠' : type === 'success' ? '✓' : 'i';
+  const actionHtml = action ? `<button class="toast-action">${escapeHtml(action.label)}</button>` : '';
   el.innerHTML = `
     <div class="toast-icon">${icon}</div>
     <div class="toast-body">
       <div class="toast-title">${escapeHtml(title)}</div>
       <div class="toast-msg">${escapeHtml(msg)}</div>
     </div>
+    ${actionHtml}
     <button class="toast-close">✕</button>
   `;
   el.querySelector('.toast-close').addEventListener('click', () => {
     el.classList.add('toast-out');
     setTimeout(() => el.remove(), 220);
   });
+  if (action) {
+    el.querySelector('.toast-action').addEventListener('click', () => {
+      try { action.onClick(); } catch (e) { dlog('error', 'Toast action failed: ' + e); }
+      el.classList.add('toast-out');
+      setTimeout(() => el.remove(), 220);
+    });
+  }
   toastContainer.appendChild(el);
   if (timeout > 0) {
     setTimeout(() => {
@@ -598,7 +607,13 @@ convertAllBtn.addEventListener('click', async () => {
   if (jobs.length === 0) { toast('Nothing to convert', 'Add files first.', 'warn'); return; }
   const ffmpeg = await invoke('check_ffmpeg').catch(() => false);
   if (!ffmpeg) {
-    toast('FFmpeg not found', 'Install FFmpeg and ensure it is on PATH. See Settings for details.', 'error', 7000);
+    toast(
+      'FFmpeg not found',
+      'Install FFmpeg and ensure ffmpeg + ffprobe are on PATH.',
+      'error',
+      9000,
+      { label: 'Download FFmpeg', onClick: () => openUrl('https://ffmpeg.org/download.html') }
+    );
     return;
   }
 
@@ -983,6 +998,81 @@ $('#defaultHwAccel').addEventListener('change', () => {
   localStorage.setItem('fr_defaultHwAccel', settings.defaultHwAccel);
 });
 
+// FFmpeg detection + refresh
+const FFMPEG_DOWNLOAD_URL = 'https://ffmpeg.org/download.html';
+
+function makeFfmpegLink(label) {
+  const a = document.createElement('a');
+  a.href = '#';
+  a.textContent = label;
+  a.addEventListener('click', (e) => { e.preventDefault(); openUrl(FFMPEG_DOWNLOAD_URL); });
+  return a;
+}
+
+async function checkFfmpegEnv(silent = false) {
+  const refreshBtn = $('#ffmpegRefreshBtn');
+  if (refreshBtn) refreshBtn.classList.add('spinning');
+  let has = false;
+  try {
+    has = await invoke('check_ffmpeg');
+  } catch (e) {
+    dlog('error', 'FFmpeg check failed: ' + e);
+  }
+
+  ffmpegStatus.innerHTML = '';
+  const info = $('#ffmpegInfo');
+  info.innerHTML = '';
+  info.style.color = '';
+
+  if (has) {
+    ffmpegStatus.className = 'ffmpeg-status ok';
+    ffmpegStatus.appendChild(document.createTextNode('FFmpeg detected'));
+    info.appendChild(document.createTextNode('FFmpeg detected on PATH.'));
+    dlog('info', 'FFmpeg detected on PATH');
+    if (!silent) toast('FFmpeg detected', 'ffmpeg and ffprobe are reachable.', 'success', 3000);
+  } else {
+    ffmpegStatus.className = 'ffmpeg-status missing';
+    ffmpegStatus.appendChild(document.createTextNode('FFmpeg not found - '));
+    ffmpegStatus.appendChild(makeFfmpegLink('install'));
+    info.style.color = 'var(--danger)';
+    info.appendChild(document.createTextNode('Not found. Install FFmpeg ('));
+    info.appendChild(makeFfmpegLink('ffmpeg.org/download'));
+    info.appendChild(document.createTextNode(') and make sure ffmpeg + ffprobe are on PATH, then click Re-check.'));
+    dlog('error', 'FFmpeg not found on PATH');
+    if (!silent) {
+      toast(
+        'FFmpeg still not found',
+        'Re-checked PATH and could not see ffmpeg or ffprobe.',
+        'error',
+        7000,
+        { label: 'Download FFmpeg', onClick: () => openUrl(FFMPEG_DOWNLOAD_URL) }
+      );
+    }
+  }
+
+  try {
+    availableHwAccels = await invoke('check_hwaccel');
+    const hwEl = $('#hwDetected');
+    if (availableHwAccels.length > 0) {
+      hwEl.textContent = 'Available: ' + availableHwAccels.join(', ').toUpperCase();
+      hwEl.style.color = 'var(--success)';
+      dlog('info', 'Hardware encoders: ' + availableHwAccels.join(', '));
+    } else {
+      hwEl.textContent = has ? 'No hardware encoders found (CPU only).' : 'Cannot detect hardware encoders without FFmpeg.';
+      hwEl.style.color = 'var(--text-dim)';
+    }
+  } catch (e) {
+    dlog('warn', 'Hardware accel check failed: ' + e);
+  }
+
+  if (refreshBtn) setTimeout(() => refreshBtn.classList.remove('spinning'), 400);
+  return has;
+}
+
+$('#ffmpegRefreshBtn').addEventListener('click', () => checkFfmpegEnv(false));
+$('#ffmpegRecheckBtn').addEventListener('click', () => checkFfmpegEnv(false));
+$('#ffmpegDownloadBtn').addEventListener('click', () => openUrl(FFMPEG_DOWNLOAD_URL));
+
 // Init
 async function init() {
   try {
@@ -997,38 +1087,7 @@ async function init() {
     dlog('warn', 'Could not get default output dir: ' + e);
   }
 
-  try {
-    const has = await invoke('check_ffmpeg');
-    if (has) {
-      ffmpegStatus.textContent = 'FFmpeg detected';
-      ffmpegStatus.className = 'ffmpeg-status ok';
-      $('#ffmpegInfo').textContent = 'FFmpeg detected on PATH.';
-      dlog('info', 'FFmpeg detected on PATH');
-    } else {
-      ffmpegStatus.textContent = 'FFmpeg not found - install from ffmpeg.org';
-      ffmpegStatus.className = 'ffmpeg-status missing';
-      $('#ffmpegInfo').textContent = 'Not found. Install from https://ffmpeg.org/ and make sure ffmpeg + ffprobe are on PATH.';
-      $('#ffmpegInfo').style.color = 'var(--danger)';
-      dlog('error', 'FFmpeg not found on PATH');
-    }
-  } catch (e) {
-    dlog('error', 'FFmpeg check failed: ' + e);
-  }
-
-  try {
-    availableHwAccels = await invoke('check_hwaccel');
-    const hwEl = $('#hwDetected');
-    if (availableHwAccels.length > 0) {
-      hwEl.textContent = 'Available: ' + availableHwAccels.join(', ').toUpperCase();
-      hwEl.style.color = 'var(--success)';
-      dlog('info', 'Hardware encoders: ' + availableHwAccels.join(', '));
-    } else {
-      hwEl.textContent = 'No hardware encoders found (CPU only).';
-      hwEl.style.color = 'var(--text-dim)';
-    }
-  } catch (e) {
-    dlog('warn', 'Hardware accel check failed: ' + e);
-  }
+  await checkFfmpegEnv(true);
 
   // Apply saved preset
   const pill = document.querySelector(`.preset-pill[data-preset="${settings.preset}"]`);
