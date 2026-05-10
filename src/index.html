@@ -58,13 +58,9 @@
 
         <div class="preset-row" id="presetRow">
           <span class="preset-label">Preset:</span>
-          <div class="preset-pill active" data-preset="iphone">iPhone 4K HEVC</div>
-          <div class="preset-pill" data-preset="iphone-1080">iPhone 1080p</div>
-          <div class="preset-pill" data-preset="mp4-h264">MP4 H.264</div>
-          <div class="preset-pill" data-preset="webm">WebM VP9</div>
-          <div class="preset-pill" data-preset="audio-mp3">Audio MP3</div>
-          <div class="preset-pill" data-preset="lossless">Lossless</div>
-          <div class="preset-pill" data-preset="custom">Custom</div>
+          <select id="presetDropdown" class="preset-dropdown"></select>
+          <button class="btn btn-ghost btn-sm" id="savePresetBtn" title="Save the current settings as a custom preset">+ Save as...</button>
+          <button class="btn btn-ghost btn-sm" id="deletePresetBtn" title="Delete this custom preset" style="display:none;">Delete</button>
         </div>
 
         <div class="convert-form">
@@ -431,11 +427,117 @@
   </div>
 </div>
 
+<div id="ffmpegInstallDialog" class="install-dialog" style="display:none;">
+  <div class="install-dialog-box">
+    <div class="install-dialog-header">
+      <div class="install-dialog-title">Install FFmpeg</div>
+      <button class="install-dialog-close" id="installDialogClose" title="Close">&#10005;</button>
+    </div>
+    <div class="install-dialog-body">
+      <div class="install-tabs">
+        <div class="install-tab" data-os="windows">Windows</div>
+        <div class="install-tab" data-os="mac">macOS</div>
+        <div class="install-tab" data-os="linux">Linux</div>
+      </div>
+
+      <div class="install-panel" data-os="windows">
+        <div class="install-section">
+          <div class="install-section-title">Quickest: one command in PowerShell</div>
+          <div class="install-cmd">
+            <code id="winCmd">winget install -e --id Gyan.FFmpeg</code>
+            <button class="copy-btn" data-target="winCmd">Copy</button>
+          </div>
+          <ol class="install-steps">
+            <li>Press <kbd>Win</kbd> + <kbd>X</kbd>, choose <strong>Terminal</strong> (or <strong>PowerShell</strong>).</li>
+            <li>Paste the command above and press <kbd>Enter</kbd>. Accept the terms when prompted.</li>
+            <li>Close this dialog and click the <strong>Re-check</strong> / refresh button.</li>
+          </ol>
+        </div>
+        <div class="install-divider"></div>
+        <div class="install-section">
+          <div class="install-section-title">Or download the zip manually</div>
+          <ol class="install-steps">
+            <li>Open <a href="#" class="ext-link" data-url="https://www.gyan.dev/ffmpeg/builds/">gyan.dev/ffmpeg/builds</a>.</li>
+            <li>Under <strong>release builds</strong>, download <strong>ffmpeg-release-essentials.zip</strong>.</li>
+            <li>Extract it. Inside there's a <code>bin</code> folder containing <code>ffmpeg.exe</code> and <code>ffprobe.exe</code>.</li>
+            <li>Move the extracted folder somewhere permanent, e.g. <code>C:\ffmpeg</code>.</li>
+            <li>Press <kbd>Win</kbd>, type <strong>Environment Variables</strong>, open it, edit <strong>Path</strong>, add <code>C:\ffmpeg\bin</code>.</li>
+            <li>Close every PowerShell window, then click <strong>Re-check</strong>.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="install-panel" data-os="mac">
+        <div class="install-section">
+          <div class="install-section-title">With Homebrew</div>
+          <div class="install-cmd">
+            <code id="macCmd">brew install ffmpeg</code>
+            <button class="copy-btn" data-target="macCmd">Copy</button>
+          </div>
+          <ol class="install-steps">
+            <li>Open <strong>Terminal</strong>.</li>
+            <li>If you do not have Homebrew, install it first from <a href="#" class="ext-link" data-url="https://brew.sh">brew.sh</a>.</li>
+            <li>Run the command above.</li>
+            <li>Click <strong>Re-check</strong> in Format Reaper.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="install-panel" data-os="linux">
+        <div class="install-section">
+          <div class="install-section-title">Debian, Ubuntu, Pop!_OS</div>
+          <div class="install-cmd">
+            <code id="linuxAptCmd">sudo apt install ffmpeg</code>
+            <button class="copy-btn" data-target="linuxAptCmd">Copy</button>
+          </div>
+        </div>
+        <div class="install-divider"></div>
+        <div class="install-section">
+          <div class="install-section-title">Fedora, RHEL</div>
+          <div class="install-cmd">
+            <code id="linuxDnfCmd">sudo dnf install ffmpeg</code>
+            <button class="copy-btn" data-target="linuxDnfCmd">Copy</button>
+          </div>
+        </div>
+        <div class="install-divider"></div>
+        <div class="install-section">
+          <div class="install-section-title">Arch, SteamOS</div>
+          <div class="install-cmd">
+            <code id="linuxPacmanCmd">sudo pacman -S ffmpeg</code>
+            <button class="copy-btn" data-target="linuxPacmanCmd">Copy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="install-dialog-footer">
+      <a href="#" class="ext-link" id="ffmpegSiteLink">Official ffmpeg.org download page</a>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost btn-sm" id="installDoneBtn">Close</button>
+      <button class="btn btn-accent btn-sm" id="installRecheckBtn">Re-check now</button>
+    </div>
+  </div>
+</div>
+
 <div id="dropOverlay" class="drop-overlay">
   <div class="drop-overlay-inner">
     <div class="drop-icon">&#11015;</div>
     <div class="drop-title">Drop files to convert</div>
     <div class="drop-sub">Video, audio and image files supported</div>
+  </div>
+</div>
+
+<div id="savePresetDialog" class="dialog-overlay" style="display:none;">
+  <div class="dialog-box">
+    <div class="dialog-title">Save preset</div>
+    <div class="dialog-body">
+      <label for="presetNameInput">Preset name</label>
+      <input type="text" id="presetNameInput" placeholder="e.g. YouTube 1080p H.264, AirDrop, Discord 25MB" maxlength="60" />
+      <div class="dialog-hint" id="presetSaveHint">Current settings will be saved. Pick a name your future self will recognize.</div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-ghost btn-sm" id="presetSaveCancelBtn">Cancel</button>
+      <button class="btn btn-accent btn-sm" id="presetSaveConfirmBtn">Save</button>
+    </div>
   </div>
 </div>
 

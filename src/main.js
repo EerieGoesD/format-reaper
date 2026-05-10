@@ -265,87 +265,181 @@ function updateDebugVisibility() {
 }
 updateDebugVisibility();
 
-// Preset selection
-document.querySelectorAll('.preset-pill').forEach(pill => {
-  pill.addEventListener('click', () => {
-    document.querySelectorAll('.preset-pill').forEach(p => p.classList.remove('active'));
-    pill.classList.add('active');
-    settings.preset = pill.dataset.preset;
-    localStorage.setItem('fr_preset', settings.preset);
-    applyPreset(settings.preset);
-  });
-});
+// Presets
+const BUILTIN_PRESETS = {
+  'iPhone 4K HEVC':  { format: 'mp4',  videoCodec: 'libx265', crf: 20, vbitrate: 0, preset: 'medium', resolution: 'keep',  fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: true,  lossless: false, hw: true },
+  'iPhone 1080p':    { format: 'mp4',  videoCodec: 'libx265', crf: 22, vbitrate: 0, preset: 'medium', resolution: '1080p', fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: true,  lossless: false, hw: true },
+  'MP4 H.264':       { format: 'mp4',  videoCodec: 'libx264', crf: 20, vbitrate: 0, preset: 'medium', resolution: 'keep',  fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: false, lossless: false, hw: true },
+  'WebM VP9':        { format: 'webm', videoCodec: 'libvpx-vp9', crf: 30, vbitrate: 0, preset: 'medium', resolution: 'keep', fps: 0, audioCodec: 'libopus', abitrate: 128, iphone: false, lossless: false, hw: false },
+  'Audio MP3 320k':  { format: 'mp3',  audioOnlyCodec: 'libmp3lame', audioOnlyBitrate: 320 },
+  'Lossless MKV':    { format: 'mkv',  videoCodec: 'libx265', preset: 'medium', resolution: 'keep', fps: 0, audioCodec: 'copy', iphone: false, lossless: true, hw: false },
+  'Custom (no preset)': { __noop: true },
+};
 
-function applyPreset(preset) {
-  dlog('event', `Applied preset: ${preset}`);
-  switch (preset) {
-    case 'iphone':
-      formatSelect.value = 'mp4';
-      videoCodec.value = 'libx265';
-      crfInput.value = '20';
-      vbitrateInput.value = '0';
-      presetSelect.value = 'medium';
-      resolutionSelect.value = 'keep';
-      fpsSelect.value = '0';
-      audioCodec.value = 'aac';
-      abitrateInput.value = '192';
-      formState.iphone = true;
-      formState.lossless = false;
-      formState.hw = true;
-      break;
-    case 'iphone-1080':
-      formatSelect.value = 'mp4';
-      videoCodec.value = 'libx265';
-      crfInput.value = '22';
-      vbitrateInput.value = '0';
-      presetSelect.value = 'medium';
-      resolutionSelect.value = '1080p';
-      fpsSelect.value = '0';
-      audioCodec.value = 'aac';
-      abitrateInput.value = '192';
-      formState.iphone = true;
-      formState.lossless = false;
-      formState.hw = true;
-      break;
-    case 'mp4-h264':
-      formatSelect.value = 'mp4';
-      videoCodec.value = 'libx264';
-      crfInput.value = '20';
-      presetSelect.value = 'medium';
-      audioCodec.value = 'aac';
-      abitrateInput.value = '192';
-      formState.iphone = false;
-      formState.lossless = false;
-      break;
-    case 'webm':
-      formatSelect.value = 'webm';
-      videoCodec.value = 'libvpx-vp9';
-      crfInput.value = '30';
-      vbitrateInput.value = '0';
-      audioCodec.value = 'libopus';
-      abitrateInput.value = '128';
-      formState.iphone = false;
-      formState.lossless = false;
-      break;
-    case 'audio-mp3':
-      formatSelect.value = 'mp3';
-      audioOnlyCodec.value = 'libmp3lame';
-      audioOnlyBitrate.value = '320';
-      break;
-    case 'lossless':
-      formatSelect.value = 'mkv';
-      videoCodec.value = 'libx265';
-      formState.lossless = true;
-      formState.iphone = false;
-      audioCodec.value = 'copy';
-      break;
-    case 'custom':
-      // no overrides
-      break;
+const PRESETS_KEY = 'fr_custom_presets_v1';
+
+function loadCustomPresets() {
+  try { return JSON.parse(localStorage.getItem(PRESETS_KEY) || '{}'); }
+  catch { return {}; }
+}
+function saveCustomPresets(presets) {
+  localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+}
+
+function snapshotForm() {
+  return {
+    format: formatSelect.value,
+    videoCodec: videoCodec.value,
+    audioCodec: audioCodec.value,
+    crf: parseInt(crfInput.value, 10) || 0,
+    vbitrate: parseInt(vbitrateInput.value, 10) || 0,
+    abitrate: parseInt(abitrateInput.value, 10) || 0,
+    preset: presetSelect.value,
+    resolution: resolutionSelect.value,
+    fps: parseFloat(fpsSelect.value) || 0,
+    imageQuality: parseInt(imageQualityInput.value, 10) || 0,
+    imageResolution: imageResolutionSelect.value,
+    audioOnlyCodec: audioOnlyCodec.value,
+    audioOnlyBitrate: parseInt(audioOnlyBitrate.value, 10) || 0,
+    iphone: !!formState.iphone,
+    lossless: !!formState.lossless,
+    metadata: !!formState.metadata,
+    hw: !!formState.hw,
+  };
+}
+
+function applyPresetData(data) {
+  if (!data || data.__noop) {
+    refreshToggles();
+    onFormChange();
+    return;
   }
+  if (data.format != null) formatSelect.value = data.format;
+  if (data.videoCodec != null) videoCodec.value = data.videoCodec;
+  if (data.audioCodec != null) audioCodec.value = data.audioCodec;
+  if (data.crf != null) crfInput.value = String(data.crf);
+  if (data.vbitrate != null) vbitrateInput.value = String(data.vbitrate);
+  if (data.abitrate != null) abitrateInput.value = String(data.abitrate);
+  if (data.preset != null) presetSelect.value = data.preset;
+  if (data.resolution != null) resolutionSelect.value = data.resolution;
+  if (data.fps != null) fpsSelect.value = String(data.fps);
+  if (data.imageQuality != null) imageQualityInput.value = String(data.imageQuality);
+  if (data.imageResolution != null) imageResolutionSelect.value = data.imageResolution;
+  if (data.audioOnlyCodec != null) audioOnlyCodec.value = data.audioOnlyCodec;
+  if (data.audioOnlyBitrate != null) audioOnlyBitrate.value = String(data.audioOnlyBitrate);
+  if (data.iphone != null) formState.iphone = !!data.iphone;
+  if (data.lossless != null) formState.lossless = !!data.lossless;
+  if (data.metadata != null) formState.metadata = !!data.metadata;
+  if (data.hw != null) formState.hw = !!data.hw;
   refreshToggles();
   onFormChange();
 }
+
+function rebuildPresetDropdown(selectedName) {
+  const dd = $('#presetDropdown');
+  const custom = loadCustomPresets();
+  const builtinNames = Object.keys(BUILTIN_PRESETS).sort((a, b) => a.localeCompare(b));
+  const customNames = Object.keys(custom).sort((a, b) => a.localeCompare(b));
+
+  dd.innerHTML = '';
+  const groupBuiltin = document.createElement('optgroup');
+  groupBuiltin.label = 'Built-in';
+  for (const name of builtinNames) {
+    const opt = document.createElement('option');
+    opt.value = 'builtin:' + name;
+    opt.textContent = name;
+    groupBuiltin.appendChild(opt);
+  }
+  dd.appendChild(groupBuiltin);
+
+  if (customNames.length > 0) {
+    const groupCustom = document.createElement('optgroup');
+    groupCustom.label = 'My presets';
+    for (const name of customNames) {
+      const opt = document.createElement('option');
+      opt.value = 'custom:' + name;
+      opt.textContent = name;
+      groupCustom.appendChild(opt);
+    }
+    dd.appendChild(groupCustom);
+  }
+
+  if (selectedName) dd.value = selectedName;
+}
+
+function applyPresetByKey(key) {
+  if (!key) return;
+  dlog('event', `Applied preset: ${key}`);
+  if (key.startsWith('builtin:')) {
+    const name = key.slice('builtin:'.length);
+    applyPresetData(BUILTIN_PRESETS[name]);
+  } else if (key.startsWith('custom:')) {
+    const name = key.slice('custom:'.length);
+    const presets = loadCustomPresets();
+    applyPresetData(presets[name]);
+  }
+  updateDeleteBtn();
+}
+
+function updateDeleteBtn() {
+  const v = $('#presetDropdown').value || '';
+  $('#deletePresetBtn').style.display = v.startsWith('custom:') ? '' : 'none';
+}
+
+$('#presetDropdown').addEventListener('change', () => {
+  const v = $('#presetDropdown').value;
+  settings.preset = v;
+  localStorage.setItem('fr_preset', v);
+  applyPresetByKey(v);
+});
+
+// Save preset dialog
+const savePresetDialog = $('#savePresetDialog');
+const presetNameInput = $('#presetNameInput');
+$('#savePresetBtn').addEventListener('click', () => {
+  presetNameInput.value = '';
+  savePresetDialog.style.display = '';
+  setTimeout(() => presetNameInput.focus(), 50);
+});
+$('#presetSaveCancelBtn').addEventListener('click', () => { savePresetDialog.style.display = 'none'; });
+savePresetDialog.addEventListener('click', (e) => {
+  if (e.target === savePresetDialog) savePresetDialog.style.display = 'none';
+});
+$('#presetSaveConfirmBtn').addEventListener('click', () => {
+  const name = (presetNameInput.value || '').trim();
+  if (!name) { toast('Name required', 'Give the preset a name.', 'warn'); return; }
+  if (BUILTIN_PRESETS[name]) { toast('Reserved name', 'That name is taken by a built-in preset.', 'warn'); return; }
+  const presets = loadCustomPresets();
+  const existed = !!presets[name];
+  presets[name] = snapshotForm();
+  saveCustomPresets(presets);
+  rebuildPresetDropdown('custom:' + name);
+  settings.preset = 'custom:' + name;
+  localStorage.setItem('fr_preset', settings.preset);
+  updateDeleteBtn();
+  savePresetDialog.style.display = 'none';
+  toast(existed ? 'Preset updated' : 'Preset saved', name, 'success', 2500);
+  dlog('event', `Saved preset: ${name}`);
+});
+presetNameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('#presetSaveConfirmBtn').click();
+  if (e.key === 'Escape') $('#presetSaveCancelBtn').click();
+});
+
+$('#deletePresetBtn').addEventListener('click', () => {
+  const v = $('#presetDropdown').value;
+  if (!v.startsWith('custom:')) return;
+  const name = v.slice('custom:'.length);
+  const presets = loadCustomPresets();
+  delete presets[name];
+  saveCustomPresets(presets);
+  rebuildPresetDropdown('builtin:iPhone 4K HEVC');
+  settings.preset = 'builtin:iPhone 4K HEVC';
+  localStorage.setItem('fr_preset', settings.preset);
+  applyPresetByKey(settings.preset);
+  toast('Preset deleted', name, 'info', 2500);
+  dlog('event', `Deleted preset: ${name}`);
+});
 
 function refreshToggles() {
   $('#losslessCheck').classList.toggle('on', formState.lossless);
@@ -612,7 +706,7 @@ convertAllBtn.addEventListener('click', async () => {
       'Install FFmpeg and ensure ffmpeg + ffprobe are on PATH.',
       'error',
       9000,
-      { label: 'Download FFmpeg', onClick: () => openUrl('https://ffmpeg.org/download.html') }
+      { label: 'Install FFmpeg', onClick: () => openInstallDialog() }
     );
     return;
   }
@@ -1005,7 +1099,7 @@ function makeFfmpegLink(label) {
   const a = document.createElement('a');
   a.href = '#';
   a.textContent = label;
-  a.addEventListener('click', (e) => { e.preventDefault(); openUrl(FFMPEG_DOWNLOAD_URL); });
+  a.addEventListener('click', (e) => { e.preventDefault(); openInstallDialog(); });
   return a;
 }
 
@@ -1045,7 +1139,7 @@ async function checkFfmpegEnv(silent = false) {
         'Re-checked PATH and could not see ffmpeg or ffprobe.',
         'error',
         7000,
-        { label: 'Download FFmpeg', onClick: () => openUrl(FFMPEG_DOWNLOAD_URL) }
+        { label: 'Install FFmpeg', onClick: () => openInstallDialog() }
       );
     }
   }
@@ -1071,7 +1165,78 @@ async function checkFfmpegEnv(silent = false) {
 
 $('#ffmpegRefreshBtn').addEventListener('click', () => checkFfmpegEnv(false));
 $('#ffmpegRecheckBtn').addEventListener('click', () => checkFfmpegEnv(false));
-$('#ffmpegDownloadBtn').addEventListener('click', () => openUrl(FFMPEG_DOWNLOAD_URL));
+$('#ffmpegDownloadBtn').addEventListener('click', () => openInstallDialog());
+
+// FFmpeg install dialog
+function detectOS() {
+  const ua = (navigator.userAgent || '').toLowerCase();
+  if (ua.includes('windows')) return 'windows';
+  if (ua.includes('mac os x') || ua.includes('macintosh')) return 'mac';
+  if (ua.includes('linux')) return 'linux';
+  return 'windows';
+}
+
+function openInstallDialog() {
+  const dlg = $('#ffmpegInstallDialog');
+  if (!dlg) return;
+  dlg.style.display = '';
+  switchInstallTab(detectOS());
+}
+
+function closeInstallDialog() {
+  const dlg = $('#ffmpegInstallDialog');
+  if (dlg) dlg.style.display = 'none';
+}
+
+function switchInstallTab(os) {
+  document.querySelectorAll('.install-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.os === os);
+  });
+  document.querySelectorAll('.install-panel').forEach(p => {
+    p.classList.toggle('active', p.dataset.os === os);
+  });
+}
+
+document.querySelectorAll('.install-tab').forEach(t => {
+  t.addEventListener('click', () => switchInstallTab(t.dataset.os));
+});
+
+$('#installDialogClose').addEventListener('click', closeInstallDialog);
+$('#installDoneBtn').addEventListener('click', closeInstallDialog);
+$('#installRecheckBtn').addEventListener('click', async () => {
+  const has = await checkFfmpegEnv(false);
+  if (has) closeInstallDialog();
+});
+$('#ffmpegInstallDialog').addEventListener('click', (e) => {
+  if (e.target.id === 'ffmpegInstallDialog') closeInstallDialog();
+});
+$('#ffmpegSiteLink').addEventListener('click', (e) => { e.preventDefault(); openUrl(FFMPEG_DOWNLOAD_URL); });
+
+document.querySelectorAll('.ext-link').forEach(a => {
+  a.addEventListener('click', (e) => {
+    if (!a.dataset.url) return;
+    e.preventDefault();
+    openUrl(a.dataset.url);
+  });
+});
+
+document.querySelectorAll('.copy-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const target = document.getElementById(btn.dataset.target);
+    if (!target) return;
+    const text = target.textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      const orig = btn.textContent;
+      btn.textContent = 'Copied';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1400);
+    } catch (e) {
+      dlog('warn', 'Clipboard write failed: ' + e);
+      toast('Copy failed', String(e), 'warn');
+    }
+  });
+});
 
 // Init
 async function init() {
@@ -1089,15 +1254,30 @@ async function init() {
 
   await checkFfmpegEnv(true);
 
-  // Apply saved preset
-  const pill = document.querySelector(`.preset-pill[data-preset="${settings.preset}"]`);
-  if (pill) {
-    document.querySelectorAll('.preset-pill').forEach(p => p.classList.remove('active'));
-    pill.classList.add('active');
-    applyPreset(settings.preset);
-  } else {
-    applyPreset('iphone');
+  // Migrate legacy preset id (old "iphone", "iphone-1080", etc.) to new key format
+  const legacyMap = {
+    'iphone': 'builtin:iPhone 4K HEVC',
+    'iphone-1080': 'builtin:iPhone 1080p',
+    'mp4-h264': 'builtin:MP4 H.264',
+    'webm': 'builtin:WebM VP9',
+    'audio-mp3': 'builtin:Audio MP3 320k',
+    'lossless': 'builtin:Lossless MKV',
+    'custom': 'builtin:Custom (no preset)',
+  };
+  if (legacyMap[settings.preset]) {
+    settings.preset = legacyMap[settings.preset];
+    localStorage.setItem('fr_preset', settings.preset);
   }
+
+  rebuildPresetDropdown(settings.preset);
+  // If saved preset doesn't exist any more, fall back to iPhone 4K HEVC
+  const dd = $('#presetDropdown');
+  if (dd.value !== settings.preset) {
+    settings.preset = 'builtin:iPhone 4K HEVC';
+    localStorage.setItem('fr_preset', settings.preset);
+    dd.value = settings.preset;
+  }
+  applyPresetByKey(settings.preset);
 
   refreshToggles();
   onFormChange();
