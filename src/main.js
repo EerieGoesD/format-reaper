@@ -27,6 +27,7 @@ let formState = {
   iphone: true,
   metadata: false,
   hw: true,
+  deinterlace: false,
 };
 
 const debugFilters = { info: true, warn: true, error: true, event: true, ffmpeg: true };
@@ -239,6 +240,7 @@ bindToggle('losslessToggleWrap', 'losslessCheck', 'lossless');
 bindToggle('iphoneToggleWrap', 'iphoneCheck', 'iphone');
 bindToggle('metadataToggleWrap', 'metadataCheck', 'metadata');
 bindToggle('hwToggleWrap', 'hwCheck', 'hw');
+bindToggle('deinterlaceToggleWrap', 'deinterlaceCheck', 'deinterlace');
 
 // Settings toggles
 function bindSettingToggle(wrapId, checkId, key, persistKey) {
@@ -267,13 +269,15 @@ updateDebugVisibility();
 
 // Presets
 const BUILTIN_PRESETS = {
-  'iPhone 4K HEVC':  { format: 'mp4',  videoCodec: 'libx265', crf: 20, vbitrate: 0, preset: 'medium', resolution: 'keep',  fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: true,  lossless: false, hw: true },
-  'iPhone 1080p':    { format: 'mp4',  videoCodec: 'libx265', crf: 22, vbitrate: 0, preset: 'medium', resolution: '1080p', fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: true,  lossless: false, hw: true },
-  'MP4 H.264':       { format: 'mp4',  videoCodec: 'libx264', crf: 20, vbitrate: 0, preset: 'medium', resolution: 'keep',  fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: false, lossless: false, hw: true },
-  'WebM VP9':        { format: 'webm', videoCodec: 'libvpx-vp9', crf: 30, vbitrate: 0, preset: 'medium', resolution: 'keep', fps: 0, audioCodec: 'libopus', abitrate: 128, iphone: false, lossless: false, hw: false },
-  'Audio MP3 320k':  { format: 'mp3',  audioOnlyCodec: 'libmp3lame', audioOnlyBitrate: 320 },
-  'Lossless MKV':    { format: 'mkv',  videoCodec: 'libx265', preset: 'medium', resolution: 'keep', fps: 0, audioCodec: 'copy', iphone: false, lossless: true, hw: false },
-  'Custom (no preset)': { __noop: true },
+  'iPhone 4K HEVC':       { format: 'mp4',  videoCodec: 'libx265', crf: 20, vbitrate: 0, preset: 'medium', resolution: 'keep',  fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: true,  lossless: false, hw: true,  deinterlace: false },
+  'iPhone 1080p':         { format: 'mp4',  videoCodec: 'libx265', crf: 22, vbitrate: 0, preset: 'medium', resolution: '1080p', fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: true,  lossless: false, hw: true,  deinterlace: false },
+  'Instagram (iPhone)':   { format: 'mp4',  videoCodec: 'libx264', crf: 21, vbitrate: 0, preset: 'medium', resolution: '1080p', fps: 30, audioCodec: 'aac',     abitrate: 128, iphone: true,  lossless: false, hw: true,  deinterlace: true  },
+  'MP4 H.264':            { format: 'mp4',  videoCodec: 'libx264', crf: 20, vbitrate: 0, preset: 'medium', resolution: 'keep',  fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: false, lossless: false, hw: true,  deinterlace: false },
+  'WebM VP9':             { format: 'webm', videoCodec: 'libvpx-vp9', crf: 30, vbitrate: 0, preset: 'medium', resolution: 'keep', fps: 0, audioCodec: 'libopus', abitrate: 128, iphone: false, lossless: false, hw: false, deinterlace: false },
+  'Audio MP3 320k':       { format: 'mp3',  audioOnlyCodec: 'libmp3lame', audioOnlyBitrate: 320 },
+  'Lossless MKV':         { format: 'mkv',  videoCodec: 'libx265', preset: 'medium', resolution: 'keep', fps: 0, audioCodec: 'copy', iphone: false, lossless: true, hw: false, deinterlace: false },
+  'Camcorder MTS clean':  { format: 'mp4',  videoCodec: 'libx265', crf: 20, vbitrate: 0, preset: 'medium', resolution: 'keep',  fps: 0,  audioCodec: 'aac',     abitrate: 256, iphone: true,  lossless: false, hw: true,  deinterlace: true  },
+  'Custom (no preset)':   { __noop: true },
 };
 
 const PRESETS_KEY = 'fr_custom_presets_v1';
@@ -305,6 +309,7 @@ function snapshotForm() {
     lossless: !!formState.lossless,
     metadata: !!formState.metadata,
     hw: !!formState.hw,
+    deinterlace: !!formState.deinterlace,
   };
 }
 
@@ -331,6 +336,7 @@ function applyPresetData(data) {
   if (data.lossless != null) formState.lossless = !!data.lossless;
   if (data.metadata != null) formState.metadata = !!data.metadata;
   if (data.hw != null) formState.hw = !!data.hw;
+  if (data.deinterlace != null) formState.deinterlace = !!data.deinterlace;
   refreshToggles();
   onFormChange();
 }
@@ -446,6 +452,7 @@ function refreshToggles() {
   $('#iphoneCheck').classList.toggle('on', formState.iphone);
   $('#metadataCheck').classList.toggle('on', formState.metadata);
   $('#hwCheck').classList.toggle('on', formState.hw);
+  $('#deinterlaceCheck').classList.toggle('on', formState.deinterlace);
 }
 
 function formatKind(fmt) {
@@ -618,6 +625,7 @@ function buildOptions(kind) {
     stripMetadata: !!formState.metadata,
     fastStart: true,
     iphoneCompatible: !!formState.iphone,
+    deinterlace: !!formState.deinterlace,
   };
 
   if (formState.hw) {

@@ -34,6 +34,8 @@ pub struct ConversionOptions {
     pub strip_metadata: bool,
     pub fast_start: bool,
     pub iphone_compatible: bool,
+    #[serde(default)]
+    pub deinterlace: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -606,13 +608,20 @@ fn build_ffmpeg_args(input: &str, output: &str, opt: &ConversionOptions) -> Vec<
         }
     }
 
+    let mut filters: Vec<String> = Vec::new();
+    if opt.deinterlace {
+        filters.push("yadif".into());
+    }
     if let Some(res) = &opt.resolution {
         if res != "keep" && !res.is_empty() {
             if let Some((w, h)) = parse_resolution(res) {
-                args.push("-vf".into());
-                args.push(format!("scale={}:{}:flags=lanczos", w, h));
+                filters.push(format!("scale={}:{}:flags=lanczos", w, h));
             }
         }
+    }
+    if !filters.is_empty() {
+        args.push("-vf".into());
+        args.push(filters.join(","));
     }
 
     if let Some(fps) = opt.fps {
