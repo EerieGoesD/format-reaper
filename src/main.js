@@ -197,8 +197,8 @@ document.querySelectorAll('.nav-item').forEach(item => {
 // Footer links
 $('#linkEerie').addEventListener('click', (e) => { e.preventDefault(); openUrl('https://eeriegoesd.com'); });
 $('#linkCoffee').addEventListener('click', (e) => { e.preventDefault(); openUrl('https://buymeacoffee.com/eeriegoesd'); });
-$('#linkIssue').addEventListener('click', (e) => { e.preventDefault(); openUrl('https://github.com/EerieGoesD/format-reaper/issues'); });
-$('#linkFeedback').addEventListener('click', (e) => { e.preventDefault(); openUrl('https://github.com/EerieGoesD/format-reaper/discussions'); });
+$('#linkIssue').addEventListener('click', (e) => { e.preventDefault(); openUrl('https://github.com/EerieGoesD/format-reaper/issues/new?template=bug-report.md'); });
+$('#linkFeedback').addEventListener('click', (e) => { e.preventDefault(); openUrl('https://github.com/EerieGoesD/format-reaper/issues/new?template=suggest-feature.md'); });
 
 async function openUrl(url) {
   try {

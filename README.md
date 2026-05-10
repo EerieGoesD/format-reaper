@@ -22,4 +22,4 @@ Image, audio and video format converter. Powered by FFmpeg. Windows, macOS, Linu
 
 ## Links
 
-Made by [EERIE](https://eeriegoesd.com) - [Support This Project](https://buymeacoffee.com/eeriegoesd) - [Report Issue](https://github.com/EerieGoesD/format-reaper/issues) - [Feedback](https://github.com/EerieGoesD/format-reaper/discussions)
+Made by [EERIE](https://eeriegoesd.com) - [Support This Project](https://buymeacoffee.com/eeriegoesd) - [Report Issue](https://github.com/EerieGoesD/format-reaper/issues/new?template=bug-report.md) - [Suggest Feature](https://github.com/EerieGoesD/format-reaper/issues/new?template=suggest-feature.md)
