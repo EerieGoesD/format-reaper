@@ -66,6 +66,8 @@ const imageQualityInput = $('#imageQuality');
 const imageResolutionSelect = $('#imageResolution');
 const audioOnlyCodec = $('#audioOnlyCodec');
 const audioOnlyBitrate = $('#audioOnlyBitrate');
+const targetSizeMbInput = $('#targetSizeMb');
+const verticalModeSelect = $('#verticalMode');
 
 const overallProgress = $('#overallProgress');
 const overallText = $('#overallText');
@@ -124,6 +126,31 @@ function fmtTime(s) {
   if (s < 60) return Math.round(s) + 's';
   if (s < 3600) return Math.floor(s/60) + 'm ' + Math.round(s%60) + 's';
   return Math.floor(s/3600) + 'h ' + Math.floor((s%3600)/60) + 'm';
+}
+
+// Parse "HH:MM:SS(.ms)" or "MM:SS" or "SS" or "SS.sss" into seconds.
+// Returns NaN if invalid (caller can check with isFinite).
+function parseTimeToSeconds(str) {
+  if (!str) return NaN;
+  const s = String(str).trim();
+  if (!s) return NaN;
+  const parts = s.split(':');
+  let total = 0;
+  for (const p of parts) {
+    const n = parseFloat(p);
+    if (!isFinite(n)) return NaN;
+    total = total * 60 + n;
+  }
+  return total;
+}
+
+function computeTrimmedDuration(fullDuration, trimStart, trimEnd) {
+  if (!fullDuration || fullDuration <= 0) return 0;
+  let start = parseTimeToSeconds(trimStart);
+  let end = parseTimeToSeconds(trimEnd);
+  if (!isFinite(start) || start < 0) start = 0;
+  if (!isFinite(end) || end <= 0 || end > fullDuration) end = fullDuration;
+  return Math.max(0, end - start);
 }
 
 // Debug logging
@@ -313,6 +340,8 @@ function snapshotForm() {
     hw: !!formState.hw,
     deinterlace: !!formState.deinterlace,
     noAudio: !!formState.noAudio,
+    targetSizeMb: parseInt(targetSizeMbInput.value, 10) || 0,
+    verticalMode: verticalModeSelect.value || 'off',
   };
 }
 
@@ -341,6 +370,8 @@ function applyPresetData(data) {
   if (data.hw != null) formState.hw = !!data.hw;
   if (data.deinterlace != null) formState.deinterlace = !!data.deinterlace;
   if (data.noAudio != null) formState.noAudio = !!data.noAudio;
+  if (data.targetSizeMb != null) targetSizeMbInput.value = String(data.targetSizeMb);
+  if (data.verticalMode != null) verticalModeSelect.value = data.verticalMode;
   refreshToggles();
   onFormChange();
 }
@@ -495,6 +526,16 @@ function onFormChange() {
 }
 formatSelect.addEventListener('change', () => { onFormChange(); });
 videoCodec.addEventListener('change', onFormChange);
+targetSizeMbInput.addEventListener('change', () => {
+  const v = parseInt(targetSizeMbInput.value, 10) || 0;
+  localStorage.setItem('fr_targetSizeMb', String(v));
+});
+verticalModeSelect.addEventListener('change', () => {
+  localStorage.setItem('fr_verticalMode', verticalModeSelect.value);
+});
+// Restore last-used values
+targetSizeMbInput.value = String(parseInt(localStorage.getItem('fr_targetSizeMb') || '0', 10));
+verticalModeSelect.value = localStorage.getItem('fr_verticalMode') || 'off';
 
 // File input
 addFilesBtn.addEventListener('click', async () => {
@@ -629,7 +670,7 @@ async function addFileToQueue(filePath) {
   dlog('event', `Added to queue: ${filename}`);
 }
 
-function buildOptions(kind) {
+function buildOptions(kind, job) {
   const fmt = formatSelect.value;
   const opt = {
     kind,
@@ -650,6 +691,9 @@ function buildOptions(kind) {
     iphoneCompatible: !!formState.iphone,
     deinterlace: !!formState.deinterlace,
     noAudio: !!formState.noAudio,
+    trimStart: job && job.trimStart ? job.trimStart : null,
+    trimEnd: job && job.trimEnd ? job.trimEnd : null,
+    verticalMode: verticalModeSelect.value || 'off',
   };
 
   if (formState.hw) {
@@ -674,6 +718,22 @@ function buildOptions(kind) {
     opt.resolution = resolutionSelect.value || 'keep';
     const f = parseFloat(fpsSelect.value || '0');
     if (f > 0) opt.fps = f;
+
+    // Fit-to-size: compute bitrate to hit target (5% safety margin).
+    // Overrides CRF / Bitrate. Requires a duration to be useful.
+    const targetMB = parseInt(targetSizeMbInput.value, 10) || 0;
+    if (targetMB > 0 && job && job.duration > 0) {
+      const effectiveDur = Math.max(
+        1,
+        computeTrimmedDuration(job.duration, job.trimStart, job.trimEnd)
+      );
+      const audioKbps = opt.noAudio ? 0 : (opt.audioBitrateKbps || 192);
+      const totalKbpsBudget = (targetMB * 8 * 1024 * 0.95) / effectiveDur;
+      const videoKbps = Math.max(50, Math.floor(totalKbpsBudget - audioKbps));
+      opt.videoBitrateKbps = videoKbps;
+      opt.crf = null;
+      dlog('info', `Fit-to-size ${targetMB}MB over ${effectiveDur.toFixed(1)}s -> video ${videoKbps} kbps + audio ${audioKbps} kbps`);
+    }
   } else if (kind === 'audio') {
     if (audioOnlyCodec.value !== 'auto') opt.audioCodec = audioOnlyCodec.value;
     const ab = parseInt(audioOnlyBitrate.value, 10) || 0;
@@ -756,7 +816,7 @@ convertAllBtn.addEventListener('click', async () => {
       dlog('error', job.error);
       continue;
     }
-    const opt = buildOptions(targetKind);
+    const opt = buildOptions(targetKind, job);
     const outPath = computeOutputPath(job.inputPath, fmt, targetKind);
     job.outputPath = outPath;
     job.status = 'Queued';
@@ -822,7 +882,12 @@ function renderJobs() {
     delete existing[job.id];
     // bind actions
     el.querySelectorAll('[data-action]').forEach(btn => {
-      btn.addEventListener('click', () => handleAction(job, btn.dataset.action));
+      const action = btn.dataset.action;
+      if (action === 'trim-start' || action === 'trim-end') {
+        btn.addEventListener('input', () => handleAction(job, action, btn.value));
+      } else {
+        btn.addEventListener('click', () => handleAction(job, action));
+      }
     });
   }
   Object.values(existing).forEach(el => el.remove());
@@ -849,13 +914,35 @@ function renderJobHTML(job) {
     : '';
   const errorBox = job.error ? `<div class="dl-error">${escapeHtml(job.error)}</div>` : '';
   const outName = job.outputPath ? basename(job.outputPath) : `(${formatSelect.value})`;
+
+  // Trim editor: only for video/audio jobs that have not started yet
+  const trimmable = (job.kind === 'video' || job.kind === 'audio')
+    && (job.status === 'Pending' || job.status === 'Failed' || job.status === 'Cancelled');
+  let trimBlock = '';
+  if (trimmable) {
+    const trimOn = !!(job.trimStart || job.trimEnd);
+    const expanded = !!job.trimExpanded;
+    const totalLabel = job.duration > 0 ? ` of ${fmtTime(job.duration)}` : '';
+    const editor = expanded
+      ? `<div class="dl-trim-row">
+           <label>Start</label>
+           <input data-action="trim-start" type="text" placeholder="00:00:05 or 5" value="${escapeHtml(job.trimStart || '')}" />
+           <label>End</label>
+           <input data-action="trim-end" type="text" placeholder="00:00:15 or 15" value="${escapeHtml(job.trimEnd || '')}" />
+           <span class="dl-trim-hint">${totalLabel}</span>
+           <button class="btn-icon" data-action="trim-clear" title="Clear trim">✕</button>
+         </div>`
+      : '';
+    trimBlock = `<button class="dl-trim-toggle ${trimOn ? 'on' : ''}" data-action="trim-toggle">${trimOn ? `Trim ${escapeHtml(job.trimStart || '0')} - ${escapeHtml(job.trimEnd || 'end')}` : '+ Trim'}</button>${editor}`;
+  }
+
   return `
     <div class="dl-row-top">
       <span class="dl-filename" title="${escapeHtml(job.inputPath)}">${escapeHtml(job.filename)}</span>
       <span class="dl-size">${fmtBytes(job.inputSize)}${job.outputSize ? ' → ' + fmtBytes(job.outputSize) : ''}</span>
       ${speedEta}
       ${statusBadge}
-      <div class="dl-actions">${revealBtn}${actions}</div>
+      <div class="dl-actions">${trimBlock}${revealBtn}${actions}</div>
     </div>
     <div class="dl-progress-wrap"><div class="dl-progress-bar ${status}" style="width:${progress}%"></div></div>
     <div class="dl-row-bottom">
@@ -866,7 +953,7 @@ function renderJobHTML(job) {
   `;
 }
 
-async function handleAction(job, action) {
+async function handleAction(job, action, value) {
   if (action === 'cancel') {
     if (job.serverId) {
       try { await invoke('cancel_conversion', { id: job.serverId }); } catch {}
@@ -881,6 +968,18 @@ async function handleAction(job, action) {
     renderJobs();
   } else if (action === 'reveal') {
     try { await invoke('reveal_file', { path: job.outputPath }); } catch (e) { dlog('error', 'Reveal failed: ' + e); }
+  } else if (action === 'trim-toggle') {
+    job.trimExpanded = !job.trimExpanded;
+    renderJobs();
+  } else if (action === 'trim-start') {
+    job.trimStart = (value || '').trim();
+  } else if (action === 'trim-end') {
+    job.trimEnd = (value || '').trim();
+  } else if (action === 'trim-clear') {
+    job.trimStart = '';
+    job.trimEnd = '';
+    job.trimExpanded = false;
+    renderJobs();
   }
 }
 

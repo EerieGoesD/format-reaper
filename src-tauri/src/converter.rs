@@ -38,6 +38,18 @@ pub struct ConversionOptions {
     pub deinterlace: bool,
     #[serde(default)]
     pub no_audio: bool,
+    /// HH:MM:SS or seconds, applied after -i (accurate seek). Empty / None = from start.
+    #[serde(default)]
+    pub trim_start: Option<String>,
+    /// HH:MM:SS or seconds, applied after -i. Empty / None = to end.
+    #[serde(default)]
+    pub trim_end: Option<String>,
+    /// Target output size in MB. When set, computes a target bitrate to hit the size and overrides CRF/bitrate.
+    #[serde(default)]
+    pub target_size_mb: Option<u32>,
+    /// "off" | "crop" | "blur" - turns landscape into 9:16 1080x1920
+    #[serde(default)]
+    pub vertical_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -414,6 +426,25 @@ fn build_ffmpeg_args(input: &str, output: &str, opt: &ConversionOptions) -> Vec<
     args.push("-i".into());
     args.push(input.into());
 
+    // Trim (accurate seek, after -i). Skipped for image kind below.
+    let want_trim = opt.kind != "image"
+        && (opt.trim_start.as_deref().map(|s| !s.is_empty()).unwrap_or(false)
+            || opt.trim_end.as_deref().map(|s| !s.is_empty()).unwrap_or(false));
+    if want_trim {
+        if let Some(start) = opt.trim_start.as_deref() {
+            if !start.is_empty() {
+                args.push("-ss".into());
+                args.push(start.into());
+            }
+        }
+        if let Some(end) = opt.trim_end.as_deref() {
+            if !end.is_empty() {
+                args.push("-to".into());
+                args.push(end.into());
+            }
+        }
+    }
+
     if opt.kind == "image" {
         if opt.strip_metadata {
             args.push("-map_metadata".into());
@@ -614,7 +645,29 @@ fn build_ffmpeg_args(input: &str, output: &str, opt: &ConversionOptions) -> Vec<
     if opt.deinterlace {
         filters.push("yadif".into());
     }
-    if let Some(res) = &opt.resolution {
+
+    // Vertical mode takes precedence over plain scale: produces a 1080x1920 9:16 output.
+    // crop = center-crop without re-padding
+    // blur = scaled fit on top of a blurred zoom-fill background (Premiere-style)
+    let vmode = opt.vertical_mode.as_deref().unwrap_or("off");
+    if vmode == "crop" {
+        // Crop to 9:16 from the source, then scale to 1080x1920
+        filters.push("crop=ih*9/16:ih,scale=1080:1920:flags=lanczos".into());
+    } else if vmode == "blur" {
+        // Two branches: scaled foreground + blurred zoomed background, overlaid
+        let chain = "split=2[bg][fg];\
+            [bg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=40:1[bg2];\
+            [fg]scale=1080:1920:force_original_aspect_ratio=decrease[fg2];\
+            [bg2][fg2]overlay=(W-w)/2:(H-h)/2";
+        // overlay= cannot live in a -vf chain that already started, so we replace the chain entirely
+        filters.clear();
+        // Re-apply deinterlace at the very start of bg/fg if requested
+        if opt.deinterlace {
+            filters.push(format!("yadif,{}", chain));
+        } else {
+            filters.push(chain.to_string());
+        }
+    } else if let Some(res) = &opt.resolution {
         if res != "keep" && !res.is_empty() {
             if let Some((w, h)) = parse_resolution(res) {
                 filters.push(format!("scale={}:{}:flags=lanczos", w, h));

@@ -128,6 +128,12 @@
               <input type="number" id="vbitrate" value="0" min="0" />
             </div>
             <div class="form-group">
+              <label>Fit to size (MB)
+                <span class="setting-tooltip" data-tip="Target final file size in megabytes. Format Reaper computes the bitrate needed to hit this size (with a 5% safety margin) and overrides CRF/Bitrate. 0 = disabled. Common targets: 8 (free Discord), 25 (Nitro Basic), 50 (Nitro), 100 (Reddit), 4096 (Instagram Reels cap).">?</span>
+              </label>
+              <input type="number" id="targetSizeMb" value="0" min="0" />
+            </div>
+            <div class="form-group">
               <label>Preset</label>
               <select id="preset">
                 <option value="ultrafast">Ultrafast</option>
@@ -153,6 +159,20 @@
                 <option value="1080p">1080p</option>
                 <option value="720p">720p</option>
                 <option value="480p">480p</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Vertical 9:16
+                <span class="setting-tooltip" data-tip="Reels / TikTok / Shorts output.
+Off: keep original aspect.
+Center crop: crops the sides off (loses content).
+Blurred fit: scales to fit + blurred zoomed background fills the bars (Premiere style, keeps everything visible).
+Output always 1080x1920.">?</span>
+              </label>
+              <select id="verticalMode">
+                <option value="off">Off (keep aspect)</option>
+                <option value="crop">Center crop</option>
+                <option value="blur">Blurred fit</option>
               </select>
             </div>
             <div class="form-group">
