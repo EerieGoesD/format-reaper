@@ -157,6 +157,54 @@ pub async fn show_in_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchEntry {
+    pub path: String,
+    pub size: u64,
+    pub modified: u64,
+}
+
+#[tauri::command]
+pub async fn list_media_files(path: String) -> Result<Vec<WatchEntry>, String> {
+    const MEDIA_EXTS: &[&str] = &[
+        "mp4", "mov", "mkv", "webm", "avi", "m4v", "mts", "m2ts", "mpg", "mpeg", "ts", "wmv",
+        "flv", "3gp", "3g2", "ogv", "f4v",
+        "mp3", "m4a", "aac", "wav", "flac", "ogg", "opus", "wma", "aiff",
+        "jpg", "jpeg", "png", "webp", "avif", "tiff", "tif", "bmp", "ico", "heic", "heif",
+    ];
+    let entries = std::fs::read_dir(&path).map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if !p.is_file() {
+            continue;
+        }
+        let ext = p
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_lowercase())
+            .unwrap_or_default();
+        if !MEDIA_EXTS.contains(&ext.as_str()) {
+            continue;
+        }
+        if let Ok(meta) = entry.metadata() {
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            out.push(WatchEntry {
+                path: p.to_string_lossy().to_string(),
+                size: meta.len(),
+                modified,
+            });
+        }
+    }
+    Ok(out)
+}
+
 #[tauri::command]
 pub async fn reveal_file(path: String) -> Result<(), String> {
     let p = std::path::PathBuf::from(&path);

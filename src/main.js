@@ -461,6 +461,7 @@ $('#presetSaveConfirmBtn').addEventListener('click', () => {
   savePresetDialog.style.display = 'none';
   toast(existed ? 'Preset updated' : 'Preset saved', name, 'success', 2500);
   dlog('event', `Saved preset: ${name}`);
+  if (typeof refreshWatchPresetSelect === 'function') refreshWatchPresetSelect();
 });
 presetNameInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') $('#presetSaveConfirmBtn').click();
@@ -480,6 +481,7 @@ $('#deletePresetBtn').addEventListener('click', () => {
   applyPresetByKey(settings.preset);
   toast('Preset deleted', name, 'info', 2500);
   dlog('event', `Deleted preset: ${name}`);
+  if (typeof refreshWatchPresetSelect === 'function') refreshWatchPresetSelect();
 });
 
 function refreshToggles() {
@@ -1443,4 +1445,174 @@ async function init() {
   setupDragDrop();
 }
 
+// Watch folders
+const WATCH_KEY = 'fr_watch_folders_v1';
+const WATCH_POLL_MS = 3000;
+// per-folder state: { id -> { seen: Map<path, {size, stable}> } }
+const watchRuntime = new Map();
+
+function loadWatchFolders() {
+  try { return JSON.parse(localStorage.getItem(WATCH_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveWatchFolders(list) {
+  localStorage.setItem(WATCH_KEY, JSON.stringify(list));
+}
+
+function refreshWatchPresetSelect() {
+  const sel = $('#watchPresetSelect');
+  if (!sel) return;
+  const current = sel.value;
+  const custom = loadCustomPresets();
+  const builtinNames = Object.keys(BUILTIN_PRESETS).sort((a, b) => a.localeCompare(b));
+  const customNames = Object.keys(custom).sort((a, b) => a.localeCompare(b));
+  sel.innerHTML = '';
+  const gb = document.createElement('optgroup');
+  gb.label = 'Built-in';
+  for (const n of builtinNames) {
+    const o = document.createElement('option');
+    o.value = 'builtin:' + n;
+    o.textContent = n;
+    gb.appendChild(o);
+  }
+  sel.appendChild(gb);
+  if (customNames.length) {
+    const gc = document.createElement('optgroup');
+    gc.label = 'My presets';
+    for (const n of customNames) {
+      const o = document.createElement('option');
+      o.value = 'custom:' + n;
+      o.textContent = n;
+      gc.appendChild(o);
+    }
+    sel.appendChild(gc);
+  }
+  if (current) sel.value = current;
+}
+
+function renderWatchFolders() {
+  const list = $('#watchFoldersList');
+  const folders = loadWatchFolders();
+  list.innerHTML = '';
+  if (folders.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'watch-folders-empty';
+    empty.textContent = 'No watch folders yet. Add one below and any new media file dropped into it will be auto-converted.';
+    list.appendChild(empty);
+    return;
+  }
+  for (const f of folders) {
+    const el = document.createElement('div');
+    el.className = 'watch-folder-item';
+    const presetLabel = f.preset.replace(/^(builtin|custom):/, '');
+    el.innerHTML = `
+      <div class="watch-folder-pulse" title="Watching"></div>
+      <div class="watch-folder-path" title="${escapeHtml(f.path)}">${escapeHtml(f.path)}</div>
+      <div class="watch-folder-preset">${escapeHtml(presetLabel)}</div>
+      <button class="watch-folder-remove" data-id="${escapeHtml(f.id)}" title="Stop watching">&#10005;</button>
+    `;
+    el.querySelector('.watch-folder-remove').addEventListener('click', () => {
+      const newList = loadWatchFolders().filter(x => x.id !== f.id);
+      saveWatchFolders(newList);
+      watchRuntime.delete(f.id);
+      renderWatchFolders();
+      dlog('event', `Stopped watching: ${f.path}`);
+    });
+    list.appendChild(el);
+  }
+}
+
+$('#watchAddBtn').addEventListener('click', async () => {
+  try {
+    const folder = await dialog.open({ directory: true, multiple: false });
+    if (typeof folder !== 'string') return;
+    const preset = $('#watchPresetSelect').value;
+    if (!preset) { toast('Pick a preset', 'Choose a preset before adding the folder.', 'warn'); return; }
+    const existing = loadWatchFolders();
+    if (existing.some(f => f.path.toLowerCase() === folder.toLowerCase())) {
+      toast('Already watching', folder, 'warn'); return;
+    }
+    const item = { id: 'w-' + Math.random().toString(36).slice(2), path: folder, preset };
+    existing.push(item);
+    saveWatchFolders(existing);
+    // Seed seen-set with current files so we do not re-queue existing content
+    try {
+      const initial = await invoke('list_media_files', { path: folder });
+      const seen = new Map();
+      for (const f of initial) seen.set(f.path, { size: f.size, stable: true });
+      watchRuntime.set(item.id, { seen });
+    } catch (e) {
+      dlog('warn', `Initial scan failed for ${folder}: ${e}`);
+      watchRuntime.set(item.id, { seen: new Map() });
+    }
+    renderWatchFolders();
+    dlog('event', `Now watching: ${folder} -> ${preset}`);
+    toast('Watching folder', folder, 'success', 2500);
+  } catch (e) {
+    dlog('error', `Add watch folder failed: ${e}`);
+  }
+});
+
+async function pollWatchFolders() {
+  const folders = loadWatchFolders();
+  if (folders.length === 0) return;
+  const savedPreset = settings.preset;
+  const savedTarget = targetSizeMbInput.value;
+  const savedVertical = verticalModeSelect.value;
+  let triggered = false;
+  for (const f of folders) {
+    let files;
+    try {
+      files = await invoke('list_media_files', { path: f.path });
+    } catch (e) {
+      dlog('warn', `Watch scan failed for ${f.path}: ${e}`);
+      continue;
+    }
+    let rt = watchRuntime.get(f.id);
+    if (!rt) { rt = { seen: new Map() }; watchRuntime.set(f.id, rt); }
+    const stillPresent = new Set();
+    for (const file of files) {
+      stillPresent.add(file.path);
+      const prev = rt.seen.get(file.path);
+      if (!prev) {
+        rt.seen.set(file.path, { size: file.size, stable: false });
+        continue;
+      }
+      if (prev.stable) continue;
+      if (prev.size === file.size && file.size > 0) {
+        rt.seen.set(file.path, { size: file.size, stable: true });
+        // Trigger conversion
+        applyPresetByKey(f.preset);
+        triggered = true;
+        await addFileToQueue(file.path);
+        dlog('event', `Watch trigger: ${file.path} (${f.preset})`);
+      } else {
+        rt.seen.set(file.path, { size: file.size, stable: false });
+      }
+    }
+    // Drop removed files from seen set
+    for (const known of Array.from(rt.seen.keys())) {
+      if (!stillPresent.has(known)) rt.seen.delete(known);
+    }
+  }
+  if (triggered) {
+    // Restore the user-selected preset and form values so the UI doesn't appear hijacked.
+    if (savedPreset) {
+      const dd = $('#presetDropdown');
+      if (dd && [...dd.options].some(o => o.value === savedPreset)) {
+        dd.value = savedPreset;
+        applyPresetByKey(savedPreset);
+      }
+    }
+    targetSizeMbInput.value = savedTarget;
+    verticalModeSelect.value = savedVertical;
+    // Auto-start the queued items
+    try { document.getElementById('convertAllBtn').click(); } catch {}
+  }
+}
+
+setInterval(() => { pollWatchFolders().catch(e => dlog('warn', `Watch poll error: ${e}`)); }, WATCH_POLL_MS);
+
 init();
+refreshWatchPresetSelect();
+renderWatchFolders();

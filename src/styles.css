@@ -180,6 +180,16 @@ select:focus { border-color: var(--accent); }
 .dl-trim-row label { font-family: var(--mono); font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
 .dl-trim-row input { width: 96px; padding: 4px 8px; font-size: 11px; font-family: var(--mono); }
 .dl-trim-row .dl-trim-hint { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+
+.watch-folders-list { display: flex; flex-direction: column; gap: 4px; }
+.watch-folder-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.watch-folder-path { font-family: var(--mono); font-size: 11px; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watch-folder-preset { font-family: var(--mono); font-size: 11px; color: var(--accent-h); flex-shrink: 0; }
+.watch-folder-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex-shrink: 0; box-shadow: 0 0 6px rgba(34,197,94,0.7); animation: watchPulse 1.6s ease-in-out infinite; }
+@keyframes watchPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+.watch-folder-remove { background: transparent; border: none; color: var(--text-dim); cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; }
+.watch-folder-remove:hover { background: var(--surface2); color: var(--danger); }
+.watch-folders-empty { font-size: 11px; color: var(--text-dim); font-style: italic; padding: 4px 2px; }
 .dl-savings { font-family: var(--mono); font-size: 10.5px; color: var(--success); }
 .dl-savings.bigger { color: var(--warning); }
 

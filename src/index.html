@@ -375,6 +375,17 @@ Output always 1080x1920.">?</span>
             </div>
           </div>
           <div class="setting-group">
+            <label>Watch Folders
+              <span class="setting-tooltip" data-tip="Format Reaper watches each folder while the app is open. Any new media file dropped or downloaded into the folder is auto-queued with the selected preset, and starts converting as soon as its file size stops growing. Output goes to your default output folder.">?</span>
+            </label>
+            <div id="watchFoldersList" class="watch-folders-list"></div>
+            <div class="setting-row" style="margin-top:6px;">
+              <select id="watchPresetSelect" class="preset-dropdown" style="min-width:160px;flex:0 0 auto;"></select>
+              <button class="btn btn-ghost btn-sm" id="watchAddBtn">+ Add folder</button>
+              <span class="status-text" id="watchStatus" style="font-size:11px;"></span>
+            </div>
+          </div>
+          <div class="setting-group">
             <label>Default Hardware Acceleration</label>
             <div class="setting-row">
               <select id="defaultHwAccel">

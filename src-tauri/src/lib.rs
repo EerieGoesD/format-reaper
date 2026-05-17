@@ -21,6 +21,7 @@ pub fn run() {
             commands::get_default_output_dir,
             commands::show_in_folder,
             commands::reveal_file,
+            commands::list_media_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
