@@ -891,6 +891,13 @@ function renderJobs() {
         btn.addEventListener('click', () => handleAction(job, action));
       }
     });
+    const stripEl = el.querySelector('[data-trim-strip] .dl-trim-strip-frames');
+    if (stripEl && job.trimExpanded) {
+      ensureThumbnailsForJob(job, stripEl).catch(e => {
+        stripEl.innerHTML = `<div class="dl-trim-strip-error">Could not generate thumbnails: ${escapeHtml(String(e))}</div>`;
+        dlog('error', `Thumbnail extract failed for ${job.filename}: ${e}`);
+      });
+    }
   }
   Object.values(existing).forEach(el => el.remove());
   updateFooter();
@@ -917,26 +924,29 @@ function renderJobHTML(job) {
   const errorBox = job.error ? `<div class="dl-error">${escapeHtml(job.error)}</div>` : '';
   const outName = job.outputPath ? basename(job.outputPath) : `(${formatSelect.value})`;
 
-  // Trim editor: only for video/audio jobs that have not started yet
-  const trimmable = (job.kind === 'video' || job.kind === 'audio')
+  // Trim editor: only for video jobs that have not started yet (and have duration)
+  const trimmable = job.kind === 'video'
+    && job.duration > 0
     && (job.status === 'Pending' || job.status === 'Failed' || job.status === 'Cancelled');
   let trimBlock = '';
   if (trimmable) {
     const trimOn = !!(job.trimStart || job.trimEnd);
-    const expanded = !!job.trimExpanded;
-    const totalLabel = job.duration > 0 ? ` of ${fmtTime(job.duration)}` : '';
-    const editor = expanded
-      ? `<div class="dl-trim-row">
-           <label>Start</label>
-           <input data-action="trim-start" type="text" placeholder="00:00:05 or 5" value="${escapeHtml(job.trimStart || '')}" />
-           <label>End</label>
-           <input data-action="trim-end" type="text" placeholder="00:00:15 or 15" value="${escapeHtml(job.trimEnd || '')}" />
-           <span class="dl-trim-hint">${totalLabel}</span>
-           <button class="btn-icon" data-action="trim-clear" title="Clear trim">✕</button>
-         </div>`
-      : '';
-    trimBlock = `<button class="dl-trim-toggle ${trimOn ? 'on' : ''}" data-action="trim-toggle">${trimOn ? `Trim ${escapeHtml(job.trimStart || '0')} - ${escapeHtml(job.trimEnd || 'end')}` : '+ Trim'}</button>${editor}`;
+    trimBlock = `<button class="dl-trim-toggle ${trimOn ? 'on' : ''}" data-action="trim-toggle">${trimOn ? `Trim ${escapeHtml(job.trimStart || '0')} - ${escapeHtml(job.trimEnd || 'end')}` : '+ Trim'}</button>`;
   }
+
+  const trimEditor = (trimmable && job.trimExpanded)
+    ? `<div class="dl-trim-strip" data-trim-strip="1">
+         <div class="dl-trim-row">
+           <label>Start</label>
+           <input data-action="trim-start" type="text" placeholder="0:05" value="${escapeHtml(job.trimStart || '')}" />
+           <label>End</label>
+           <input data-action="trim-end" type="text" placeholder="0:15" value="${escapeHtml(job.trimEnd || '')}" />
+           <span class="dl-trim-hint">of ${fmtTime(job.duration)} - click a frame to set IN, shift-click for OUT</span>
+           <button class="btn-icon" data-action="trim-clear" title="Clear trim">✕</button>
+         </div>
+         <div class="dl-trim-strip-frames"><div class="dl-trim-strip-loading">Generating preview thumbnails...</div></div>
+       </div>`
+    : '';
 
   return `
     <div class="dl-row-top">
@@ -951,8 +961,85 @@ function renderJobHTML(job) {
       <span class="dl-url" title="${escapeHtml(job.outputPath || '')}">${escapeHtml(outName)}</span>
       <span class="dl-arrow">${job.kind} → ${formatSelect.value}</span>
     </div>
+    ${trimEditor}
     ${errorBox}
   `;
+}
+
+const THUMB_COUNT = 8;
+const thumbCache = new Map(); // jobInputPath -> [{path, timeSeconds}]
+
+async function ensureThumbnailsForJob(job, stripEl) {
+  let thumbs = thumbCache.get(job.inputPath);
+  if (!thumbs) {
+    thumbs = await invoke('extract_thumbnails', {
+      inputPath: job.inputPath,
+      count: THUMB_COUNT,
+      durationSeconds: job.duration || 0,
+    });
+    thumbCache.set(job.inputPath, thumbs);
+    dlog('info', `Generated ${thumbs.length} preview thumbnails for ${job.filename}`);
+  }
+  renderTrimStrip(job, stripEl, thumbs);
+}
+
+function renderTrimStrip(job, stripEl, thumbs) {
+  const startSec = parseTimeToSeconds(job.trimStart);
+  const endSec = parseTimeToSeconds(job.trimEnd);
+  const startOK = isFinite(startSec) && startSec > 0;
+  const endOK = isFinite(endSec) && endSec > 0;
+  const convertFileSrc = (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.convertFileSrc) || ((p) => p);
+
+  stripEl.innerHTML = '';
+  thumbs.forEach((t, idx) => {
+    const frame = document.createElement('div');
+    frame.className = 'dl-trim-frame';
+    const time = t.timeSeconds != null ? t.timeSeconds : t.time_seconds;
+    if (startOK && endOK && time >= startSec && time <= endSec) frame.classList.add('in-range');
+    // mark closest frame to start/end times
+    if (startOK && nearestThumbIndex(thumbs, startSec) === idx) frame.classList.add('marker-start');
+    if (endOK && nearestThumbIndex(thumbs, endSec) === idx) frame.classList.add('marker-end');
+    const img = document.createElement('img');
+    img.src = convertFileSrc(t.path);
+    img.alt = '';
+    img.draggable = false;
+    frame.appendChild(img);
+    const label = document.createElement('div');
+    label.className = 'dl-trim-time';
+    label.textContent = formatTimestamp(time);
+    frame.appendChild(label);
+    frame.addEventListener('click', (e) => {
+      const ts = formatTimestamp(time);
+      if (e.shiftKey) {
+        job.trimEnd = ts;
+      } else {
+        job.trimStart = ts;
+      }
+      renderJobs();
+    });
+    stripEl.appendChild(frame);
+  });
+}
+
+function nearestThumbIndex(thumbs, target) {
+  let best = -1;
+  let bestDiff = Infinity;
+  thumbs.forEach((t, i) => {
+    const time = t.timeSeconds != null ? t.timeSeconds : t.time_seconds;
+    const d = Math.abs(time - target);
+    if (d < bestDiff) { bestDiff = d; best = i; }
+  });
+  return best;
+}
+
+function formatTimestamp(seconds) {
+  if (!isFinite(seconds) || seconds < 0) return '0:00';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = (seconds % 60);
+  const sStr = (s < 10 ? '0' : '') + s.toFixed(s >= 10 ? 1 : 2).replace(/\.?0+$/, '');
+  const mStr = (h > 0 ? (m < 10 ? '0' : '') + m : '' + m);
+  return h > 0 ? `${h}:${mStr}:${sStr}` : `${mStr}:${sStr}`;
 }
 
 async function handleAction(job, action, value) {

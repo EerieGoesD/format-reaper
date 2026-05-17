@@ -22,6 +22,7 @@ pub fn run() {
             commands::show_in_folder,
             commands::reveal_file,
             commands::list_media_files,
+            commands::extract_thumbnails,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -159,6 +159,100 @@ pub async fn show_in_folder(path: String) -> Result<(), String> {
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct Thumbnail {
+    pub path: String,
+    pub time_seconds: f64,
+}
+
+#[tauri::command]
+pub async fn extract_thumbnails(
+    input_path: String,
+    count: u32,
+    duration_seconds: f64,
+) -> Result<Vec<Thumbnail>, String> {
+    use std::process::Stdio;
+    use tokio::process::Command;
+
+    if duration_seconds <= 0.0 {
+        return Err("Duration is zero, cannot extract thumbnails.".into());
+    }
+    let count = count.clamp(2, 32);
+
+    let cache_root = dirs_next::cache_dir()
+        .unwrap_or_else(|| std::env::temp_dir())
+        .join("format-reaper")
+        .join("thumbs");
+    std::fs::create_dir_all(&cache_root).map_err(|e| e.to_string())?;
+
+    let key = hash_path_key(&input_path);
+    let dir = cache_root.join(&key);
+    let _ = std::fs::create_dir_all(&dir);
+
+    let mut out = Vec::with_capacity(count as usize);
+    for i in 0..count {
+        let t = (i as f64 + 0.5) * (duration_seconds / count as f64);
+        let thumb = dir.join(format!("t{:02}.jpg", i));
+        if !thumb.is_file() {
+            let mut cmd = Command::new("ffmpeg");
+            cmd.args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-ss",
+                &format!("{:.3}", t),
+                "-i",
+                &input_path,
+                "-frames:v",
+                "1",
+                "-vf",
+                "scale=160:-2:flags=lanczos",
+                "-q:v",
+                "5",
+                "-y",
+                thumb.to_string_lossy().as_ref(),
+            ]);
+            cmd.stdout(Stdio::null());
+            cmd.stderr(Stdio::piped());
+            #[cfg(windows)]
+            cmd.creation_flags(0x08000000);
+
+            let result = cmd.output().await.map_err(|e| e.to_string())?;
+            if !result.status.success() {
+                return Err(format!(
+                    "ffmpeg thumbnail failed at {:.2}s: {}",
+                    t,
+                    String::from_utf8_lossy(&result.stderr)
+                ));
+            }
+        }
+        out.push(Thumbnail {
+            path: thumb.to_string_lossy().to_string(),
+            time_seconds: t,
+        });
+    }
+    Ok(out)
+}
+
+fn hash_path_key(path: &str) -> String {
+    // Cheap stable filename-safe hash from path + mtime.
+    let mtime = std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let mut hash: u64 = 1469598103934665603;
+    for b in path.as_bytes() {
+        hash ^= *b as u64;
+        hash = hash.wrapping_mul(1099511628211);
+    }
+    hash ^= mtime;
+    hash = hash.wrapping_mul(1099511628211);
+    format!("{:016x}", hash)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WatchEntry {
     pub path: String,
     pub size: u64,

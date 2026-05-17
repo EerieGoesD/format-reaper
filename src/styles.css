@@ -181,6 +181,21 @@ select:focus { border-color: var(--accent); }
 .dl-trim-row input { width: 96px; padding: 4px 8px; font-size: 11px; font-family: var(--mono); }
 .dl-trim-row .dl-trim-hint { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
 
+.dl-trim-strip { display: flex; flex-direction: column; gap: 6px; padding: 6px 0; }
+.dl-trim-strip-hint { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); }
+.dl-trim-strip-frames { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; position: relative; }
+.dl-trim-frame { position: relative; cursor: pointer; aspect-ratio: 16/9; overflow: hidden; border-radius: 4px; border: 1.5px solid var(--border); transition: border-color 0.12s; background: var(--surface2); }
+.dl-trim-frame:hover { border-color: var(--accent); }
+.dl-trim-frame img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.dl-trim-frame .dl-trim-time { position: absolute; bottom: 1px; left: 2px; font-family: var(--mono); font-size: 9px; color: #fff; background: rgba(0,0,0,0.65); padding: 0 3px; border-radius: 2px; pointer-events: none; }
+.dl-trim-frame.in-range { border-color: var(--accent-h); box-shadow: inset 0 0 0 1px var(--accent-h); }
+.dl-trim-frame.marker-start { border-color: var(--success); }
+.dl-trim-frame.marker-start::before { content: "IN"; position: absolute; top: 1px; left: 2px; font-family: var(--mono); font-size: 9px; color: #0a0a0c; background: var(--success); padding: 0 3px; border-radius: 2px; font-weight: 600; pointer-events: none; }
+.dl-trim-frame.marker-end { border-color: var(--danger); }
+.dl-trim-frame.marker-end::before { content: "OUT"; position: absolute; top: 1px; left: 2px; font-family: var(--mono); font-size: 9px; color: #fff; background: var(--danger); padding: 0 3px; border-radius: 2px; font-weight: 600; pointer-events: none; }
+.dl-trim-strip-loading { font-family: var(--mono); font-size: 11px; color: var(--text-dim); padding: 8px; text-align: center; }
+.dl-trim-strip-error { font-family: var(--mono); font-size: 10.5px; color: var(--danger); padding: 6px 0; }
+
 .watch-folders-list { display: flex; flex-direction: column; gap: 4px; }
 .watch-folder-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
 .watch-folder-path { font-family: var(--mono); font-size: 11px; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
