@@ -166,6 +166,7 @@ pub struct Thumbnail {
 
 #[tauri::command]
 pub async fn extract_thumbnails(
+    app: tauri::AppHandle,
     input_path: String,
     count: u32,
     duration_seconds: f64,
@@ -188,49 +189,83 @@ pub async fn extract_thumbnails(
     let dir = cache_root.join(&key);
     let _ = std::fs::create_dir_all(&dir);
 
-    let mut out = Vec::with_capacity(count as usize);
+    // Spawn one ffmpeg per thumbnail in parallel via JoinSet.
+    // Each emits "thumbnail-ready" as soon as it finishes so the UI can
+    // populate the timeline progressively instead of waiting for all N.
+    let mut set = tokio::task::JoinSet::new();
     for i in 0..count {
         let t = (i as f64 + 0.5) * (duration_seconds / count as f64);
-        let thumb = dir.join(format!("t{:02}.jpg", i));
-        if !thumb.is_file() {
-            let mut cmd = Command::new("ffmpeg");
-            cmd.args([
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-ss",
-                &format!("{:.3}", t),
-                "-i",
-                &input_path,
-                "-frames:v",
-                "1",
-                "-vf",
-                "scale=160:-2:flags=lanczos",
-                "-q:v",
-                "5",
-                "-y",
-                thumb.to_string_lossy().as_ref(),
-            ]);
-            cmd.stdout(Stdio::null());
-            cmd.stderr(Stdio::piped());
-            #[cfg(windows)]
-            cmd.creation_flags(0x08000000);
+        let thumb_path = dir.join(format!("t{:02}.jpg", i));
+        let input = input_path.clone();
+        let app_clone = app.clone();
+        let input_for_event = input_path.clone();
+        set.spawn(async move {
+            if !thumb_path.is_file() {
+                let mut cmd = Command::new("ffmpeg");
+                cmd.args([
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-ss",
+                    &format!("{:.3}", t),
+                    "-i",
+                    &input,
+                    "-frames:v",
+                    "1",
+                    "-vf",
+                    "scale=128:-2:flags=fast_bilinear",
+                    "-q:v",
+                    "7",
+                    "-y",
+                    thumb_path.to_string_lossy().as_ref(),
+                ]);
+                cmd.stdout(Stdio::null());
+                cmd.stderr(Stdio::piped());
+                #[cfg(windows)]
+                cmd.creation_flags(0x08000000);
 
-            let result = cmd.output().await.map_err(|e| e.to_string())?;
-            if !result.status.success() {
-                return Err(format!(
-                    "ffmpeg thumbnail failed at {:.2}s: {}",
-                    t,
-                    String::from_utf8_lossy(&result.stderr)
-                ));
+                let result = cmd
+                    .output()
+                    .await
+                    .map_err(|e| format!("spawn ffmpeg: {}", e))?;
+                if !result.status.success() {
+                    return Err::<(u32, std::path::PathBuf, f64), String>(format!(
+                        "ffmpeg thumbnail failed at {:.2}s: {}",
+                        t,
+                        String::from_utf8_lossy(&result.stderr)
+                    ));
+                }
             }
-        }
-        out.push(Thumbnail {
-            path: thumb.to_string_lossy().to_string(),
-            time_seconds: t,
+            // Emit progressive event keyed by the source input path so the UI can route it.
+            let _ = app_clone.emit(
+                "thumbnail-ready",
+                serde_json::json!({
+                    "inputPath": input_for_event,
+                    "index": i,
+                    "path": thumb_path.to_string_lossy().to_string(),
+                    "timeSeconds": t,
+                }),
+            );
+            Ok::<(u32, std::path::PathBuf, f64), String>((i, thumb_path, t))
         });
     }
-    Ok(out)
+
+    let mut results: Vec<(u32, std::path::PathBuf, f64)> = Vec::with_capacity(count as usize);
+    while let Some(joined) = set.join_next().await {
+        match joined {
+            Ok(Ok(t)) => results.push(t),
+            Ok(Err(e)) => return Err(e),
+            Err(e) => return Err(format!("join error: {}", e)),
+        }
+    }
+    results.sort_by_key(|r| r.0);
+    Ok(results
+        .into_iter()
+        .map(|(_, p, t)| Thumbnail {
+            path: p.to_string_lossy().to_string(),
+            time_seconds: t,
+        })
+        .collect())
 }
 
 fn hash_path_key(path: &str) -> String {

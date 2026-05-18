@@ -194,6 +194,9 @@ select:focus { border-color: var(--accent); }
 .dl-trim-timeline { position: relative; height: 56px; border-radius: 6px; overflow: hidden; background: var(--bg); border: 1px solid var(--border); user-select: none; }
 .dl-trim-timeline-thumbs { position: absolute; inset: 0; display: flex; }
 .dl-trim-timeline-thumbs img { flex: 1; height: 100%; object-fit: cover; pointer-events: none; opacity: 0.85; }
+.dl-trim-thumb { flex: 1; height: 100%; background-size: cover; background-position: center; background-repeat: no-repeat; pointer-events: none; opacity: 0.85; }
+.dl-trim-thumb:not(.loaded) { background-color: var(--surface2); background-image: linear-gradient(90deg, rgba(255,255,255,0.0) 0%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.0) 100%); background-size: 200% 100%; animation: trimSkeleton 1.4s ease-in-out infinite; }
+@keyframes trimSkeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .dl-trim-mask { position: absolute; top: 0; bottom: 0; background: rgba(10,10,12,0.65); pointer-events: none; }
 .dl-trim-mask.left { left: 0; }
 .dl-trim-mask.right { right: 0; }

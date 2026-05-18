@@ -958,21 +958,70 @@ function renderJobHTML(job) {
   `;
 }
 
-const THUMB_COUNT = 20;
+const THUMB_COUNT = 16;
 const thumbCache = new Map(); // jobInputPath -> [{path, timeSeconds}]
+const thumbInflight = new Map(); // jobInputPath -> Promise<thumbs>
+
+// Listen once for streamed thumbnail-ready events
+let thumbStreamSubscribed = false;
+function subscribeThumbnailStream() {
+  if (thumbStreamSubscribed) return;
+  thumbStreamSubscribed = true;
+  listen('thumbnail-ready', (e) => {
+    const p = e.payload || {};
+    const inputPath = p.inputPath;
+    const index = p.index;
+    if (inputPath == null || index == null) return;
+    const convertFileSrc = (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.convertFileSrc) || ((x) => x);
+    // Fill the slot
+    document.querySelectorAll(`[data-trim-thumb][data-input-key="${cssEscapeKey(inputPath)}"][data-index="${index}"]`)
+      .forEach(slot => {
+        slot.style.backgroundImage = `url("${convertFileSrc(p.path)}")`;
+        slot.classList.add('loaded');
+        // If this slot's editor has no preview image yet, seed it now
+        const editor = slot.closest('[data-trim-editor]');
+        if (editor) {
+          const preview = editor.querySelector('[data-trim-preview-img]');
+          if (preview && !preview.style.backgroundImage) {
+            preview.style.backgroundImage = slot.style.backgroundImage;
+          }
+        }
+      });
+  });
+}
+function cssEscapeKey(s) {
+  return String(s).replace(/["\\]/g, '\\$&');
+}
 
 async function ensureThumbnailsForJob(job, editorEl) {
-  let thumbs = thumbCache.get(job.inputPath);
-  if (!thumbs) {
-    thumbs = await invoke('extract_thumbnails', {
+  subscribeThumbnailStream();
+
+  const cached = thumbCache.get(job.inputPath);
+  // Render the timeline scaffolding RIGHT NOW so the user sees the editor instantly.
+  // Cached thumbs (or already-loaded paths) will populate slots inline; missing ones
+  // will fill in as `thumbnail-ready` events stream from Rust.
+  renderTrimTimeline(job, editorEl, cached || null);
+
+  if (cached) return cached;
+
+  let pending = thumbInflight.get(job.inputPath);
+  if (!pending) {
+    pending = invoke('extract_thumbnails', {
       inputPath: job.inputPath,
       count: THUMB_COUNT,
       durationSeconds: job.duration || 0,
+    }).then(thumbs => {
+      thumbCache.set(job.inputPath, thumbs);
+      thumbInflight.delete(job.inputPath);
+      dlog('info', `Generated ${thumbs.length} preview thumbnails for ${job.filename}`);
+      return thumbs;
+    }).catch(e => {
+      thumbInflight.delete(job.inputPath);
+      throw e;
     });
-    thumbCache.set(job.inputPath, thumbs);
-    dlog('info', `Generated ${thumbs.length} preview thumbnails for ${job.filename}`);
+    thumbInflight.set(job.inputPath, pending);
   }
-  renderTrimTimeline(job, editorEl, thumbs);
+  return pending;
 }
 
 function thumbTime(t) {
@@ -992,6 +1041,7 @@ function nearestThumb(thumbs, targetSec) {
 function renderTrimTimeline(job, editorEl, thumbs) {
   const convertFileSrc = (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.convertFileSrc) || ((p) => p);
   const duration = job.duration;
+  const inputKey = cssEscapeKey(job.inputPath);
 
   // Initialize trim values if unset
   let startSec = parseTimeToSeconds(job.trimStart);
@@ -999,6 +1049,16 @@ function renderTrimTimeline(job, editorEl, thumbs) {
   if (!isFinite(startSec) || startSec < 0) startSec = 0;
   if (!isFinite(endSec) || endSec <= 0 || endSec > duration) endSec = duration;
   if (startSec >= endSec) { startSec = 0; endSec = duration; }
+
+  // Build slot HTML: cached thumbs already populated, others wait for the streamed event.
+  const slots = [];
+  for (let i = 0; i < THUMB_COUNT; i++) {
+    let bg = '';
+    if (thumbs && thumbs[i]) {
+      bg = `style="background-image:url('${convertFileSrc(thumbs[i].path)}')"`;
+    }
+    slots.push(`<div class="dl-trim-thumb${thumbs && thumbs[i] ? ' loaded' : ''}" data-trim-thumb data-input-key="${inputKey}" data-index="${i}" ${bg}></div>`);
+  }
 
   editorEl.innerHTML = `
     <div class="dl-trim-preview">
@@ -1011,7 +1071,7 @@ function renderTrimTimeline(job, editorEl, thumbs) {
     </div>
     <div class="dl-trim-timeline" data-trim-timeline>
       <div class="dl-trim-timeline-thumbs">
-        ${thumbs.map(t => `<img src="${convertFileSrc(t.path)}" alt="" draggable="false">`).join('')}
+        ${slots.join('')}
       </div>
       <div class="dl-trim-mask left" data-trim-mask-left></div>
       <div class="dl-trim-mask right" data-trim-mask-right></div>
@@ -1048,9 +1108,23 @@ function renderTrimTimeline(job, editorEl, thumbs) {
   });
 
   function setPreviewToTime(t) {
-    const nearest = nearestThumb(thumbs, t);
-    previewImg.style.backgroundImage = `url("${convertFileSrc(nearest.path)}")`;
     previewTime.textContent = formatTimestamp(t);
+    // Look up nearest loaded slot in the DOM (handles cached + streamed thumbs uniformly)
+    const slots = editorEl.querySelectorAll('[data-trim-thumb].loaded');
+    if (slots.length === 0) {
+      previewImg.style.backgroundImage = '';
+      return;
+    }
+    const idx = Math.min(slots.length - 1, Math.max(0, Math.round((t / duration) * (THUMB_COUNT - 1))));
+    // slots are ordered by index attr but may not be all loaded; find the loaded one closest by index
+    let best = slots[0];
+    let bestDiff = Infinity;
+    slots.forEach(s => {
+      const si = parseInt(s.dataset.index, 10);
+      const d = Math.abs(si - idx);
+      if (d < bestDiff) { bestDiff = d; best = s; }
+    });
+    previewImg.style.backgroundImage = best.style.backgroundImage;
   }
 
   function paint() {
