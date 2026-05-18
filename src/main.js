@@ -891,10 +891,10 @@ function renderJobs() {
         btn.addEventListener('click', () => handleAction(job, action));
       }
     });
-    const stripEl = el.querySelector('[data-trim-strip] .dl-trim-strip-frames');
-    if (stripEl && job.trimExpanded) {
-      ensureThumbnailsForJob(job, stripEl).catch(e => {
-        stripEl.innerHTML = `<div class="dl-trim-strip-error">Could not generate thumbnails: ${escapeHtml(String(e))}</div>`;
+    const editorEl = el.querySelector('[data-trim-editor]');
+    if (editorEl && job.trimExpanded) {
+      ensureThumbnailsForJob(job, editorEl).catch(e => {
+        editorEl.innerHTML = `<div class="dl-trim-error">Could not generate thumbnails: ${escapeHtml(String(e))}</div>`;
         dlog('error', `Thumbnail extract failed for ${job.filename}: ${e}`);
       });
     }
@@ -935,16 +935,8 @@ function renderJobHTML(job) {
   }
 
   const trimEditor = (trimmable && job.trimExpanded)
-    ? `<div class="dl-trim-strip" data-trim-strip="1">
-         <div class="dl-trim-row">
-           <label>Start</label>
-           <input data-action="trim-start" type="text" placeholder="0:05" value="${escapeHtml(job.trimStart || '')}" />
-           <label>End</label>
-           <input data-action="trim-end" type="text" placeholder="0:15" value="${escapeHtml(job.trimEnd || '')}" />
-           <span class="dl-trim-hint">of ${fmtTime(job.duration)} - click a frame to set IN, shift-click for OUT</span>
-           <button class="btn-icon" data-action="trim-clear" title="Clear trim">✕</button>
-         </div>
-         <div class="dl-trim-strip-frames"><div class="dl-trim-strip-loading">Generating preview thumbnails...</div></div>
+    ? `<div class="dl-trim-editor" data-trim-editor="1">
+         <div class="dl-trim-loading">Generating preview thumbnails...</div>
        </div>`
     : '';
 
@@ -966,10 +958,10 @@ function renderJobHTML(job) {
   `;
 }
 
-const THUMB_COUNT = 8;
+const THUMB_COUNT = 20;
 const thumbCache = new Map(); // jobInputPath -> [{path, timeSeconds}]
 
-async function ensureThumbnailsForJob(job, stripEl) {
+async function ensureThumbnailsForJob(job, editorEl) {
   let thumbs = thumbCache.get(job.inputPath);
   if (!thumbs) {
     thumbs = await invoke('extract_thumbnails', {
@@ -980,56 +972,170 @@ async function ensureThumbnailsForJob(job, stripEl) {
     thumbCache.set(job.inputPath, thumbs);
     dlog('info', `Generated ${thumbs.length} preview thumbnails for ${job.filename}`);
   }
-  renderTrimStrip(job, stripEl, thumbs);
+  renderTrimTimeline(job, editorEl, thumbs);
 }
 
-function renderTrimStrip(job, stripEl, thumbs) {
-  const startSec = parseTimeToSeconds(job.trimStart);
-  const endSec = parseTimeToSeconds(job.trimEnd);
-  const startOK = isFinite(startSec) && startSec > 0;
-  const endOK = isFinite(endSec) && endSec > 0;
-  const convertFileSrc = (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.convertFileSrc) || ((p) => p);
-
-  stripEl.innerHTML = '';
-  thumbs.forEach((t, idx) => {
-    const frame = document.createElement('div');
-    frame.className = 'dl-trim-frame';
-    const time = t.timeSeconds != null ? t.timeSeconds : t.time_seconds;
-    if (startOK && endOK && time >= startSec && time <= endSec) frame.classList.add('in-range');
-    // mark closest frame to start/end times
-    if (startOK && nearestThumbIndex(thumbs, startSec) === idx) frame.classList.add('marker-start');
-    if (endOK && nearestThumbIndex(thumbs, endSec) === idx) frame.classList.add('marker-end');
-    const img = document.createElement('img');
-    img.src = convertFileSrc(t.path);
-    img.alt = '';
-    img.draggable = false;
-    frame.appendChild(img);
-    const label = document.createElement('div');
-    label.className = 'dl-trim-time';
-    label.textContent = formatTimestamp(time);
-    frame.appendChild(label);
-    frame.addEventListener('click', (e) => {
-      const ts = formatTimestamp(time);
-      if (e.shiftKey) {
-        job.trimEnd = ts;
-      } else {
-        job.trimStart = ts;
-      }
-      renderJobs();
-    });
-    stripEl.appendChild(frame);
-  });
+function thumbTime(t) {
+  return t.timeSeconds != null ? t.timeSeconds : t.time_seconds;
 }
 
-function nearestThumbIndex(thumbs, target) {
-  let best = -1;
+function nearestThumb(thumbs, targetSec) {
+  let best = thumbs[0];
   let bestDiff = Infinity;
-  thumbs.forEach((t, i) => {
-    const time = t.timeSeconds != null ? t.timeSeconds : t.time_seconds;
-    const d = Math.abs(time - target);
-    if (d < bestDiff) { bestDiff = d; best = i; }
-  });
+  for (const t of thumbs) {
+    const d = Math.abs(thumbTime(t) - targetSec);
+    if (d < bestDiff) { bestDiff = d; best = t; }
+  }
   return best;
+}
+
+function renderTrimTimeline(job, editorEl, thumbs) {
+  const convertFileSrc = (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.convertFileSrc) || ((p) => p);
+  const duration = job.duration;
+
+  // Initialize trim values if unset
+  let startSec = parseTimeToSeconds(job.trimStart);
+  let endSec = parseTimeToSeconds(job.trimEnd);
+  if (!isFinite(startSec) || startSec < 0) startSec = 0;
+  if (!isFinite(endSec) || endSec <= 0 || endSec > duration) endSec = duration;
+  if (startSec >= endSec) { startSec = 0; endSec = duration; }
+
+  editorEl.innerHTML = `
+    <div class="dl-trim-preview">
+      <div class="dl-trim-preview-img" data-trim-preview-img></div>
+      <div class="dl-trim-preview-info">
+        <div class="dl-trim-preview-time" data-trim-preview-time></div>
+        <div>Source duration: <strong>${fmtTime(duration)}</strong></div>
+        <div>Drag the <span style="color:var(--success);">green</span> handle for IN, the <span style="color:var(--danger);">red</span> handle for OUT.</div>
+      </div>
+    </div>
+    <div class="dl-trim-timeline" data-trim-timeline>
+      <div class="dl-trim-timeline-thumbs">
+        ${thumbs.map(t => `<img src="${convertFileSrc(t.path)}" alt="" draggable="false">`).join('')}
+      </div>
+      <div class="dl-trim-mask left" data-trim-mask-left></div>
+      <div class="dl-trim-mask right" data-trim-mask-right></div>
+      <div class="dl-trim-range-band" data-trim-range></div>
+      <div class="dl-trim-handle in" data-trim-handle="in"></div>
+      <div class="dl-trim-handle out" data-trim-handle="out"></div>
+    </div>
+    <div class="dl-trim-footer">
+      <span>IN <span class="trim-label-in" data-trim-in-label></span></span>
+      <span>OUT <span class="trim-label-out" data-trim-out-label></span></span>
+      <span>Trimmed length <span class="trim-len" data-trim-len-label></span></span>
+      <button class="btn btn-ghost btn-sm" data-action="trim-clear">Reset</button>
+    </div>
+  `;
+
+  const timeline = editorEl.querySelector('[data-trim-timeline]');
+  const handleIn = editorEl.querySelector('[data-trim-handle="in"]');
+  const handleOut = editorEl.querySelector('[data-trim-handle="out"]');
+  const maskLeft = editorEl.querySelector('[data-trim-mask-left]');
+  const maskRight = editorEl.querySelector('[data-trim-mask-right]');
+  const rangeBand = editorEl.querySelector('[data-trim-range]');
+  const previewImg = editorEl.querySelector('[data-trim-preview-img]');
+  const previewTime = editorEl.querySelector('[data-trim-preview-time]');
+  const inLabel = editorEl.querySelector('[data-trim-in-label]');
+  const outLabel = editorEl.querySelector('[data-trim-out-label]');
+  const lenLabel = editorEl.querySelector('[data-trim-len-label]');
+
+  // Reset button reuses handleAction wiring
+  editorEl.querySelector('[data-action="trim-clear"]').addEventListener('click', () => {
+    job.trimStart = '';
+    job.trimEnd = '';
+    job.trimExpanded = false;
+    renderJobs();
+  });
+
+  function setPreviewToTime(t) {
+    const nearest = nearestThumb(thumbs, t);
+    previewImg.style.backgroundImage = `url("${convertFileSrc(nearest.path)}")`;
+    previewTime.textContent = formatTimestamp(t);
+  }
+
+  function paint() {
+    const startPct = (startSec / duration) * 100;
+    const endPct = (endSec / duration) * 100;
+    handleIn.style.left = startPct + '%';
+    handleOut.style.left = endPct + '%';
+    maskLeft.style.width = startPct + '%';
+    maskRight.style.width = (100 - endPct) + '%';
+    rangeBand.style.left = startPct + '%';
+    rangeBand.style.width = (endPct - startPct) + '%';
+    inLabel.textContent = formatTimestamp(startSec);
+    outLabel.textContent = formatTimestamp(endSec);
+    lenLabel.textContent = formatTimestamp(endSec - startSec);
+  }
+
+  function commit() {
+    // Only persist if user actually changed something (not full range)
+    job.trimStart = startSec > 0.01 ? formatTimestamp(startSec) : '';
+    job.trimEnd = endSec < duration - 0.01 ? formatTimestamp(endSec) : '';
+    // Update toggle button label in the row above without full re-render
+    const trimToggle = editorEl.parentElement.querySelector('[data-action="trim-toggle"]');
+    if (trimToggle) {
+      const trimOn = !!(job.trimStart || job.trimEnd);
+      trimToggle.classList.toggle('on', trimOn);
+      trimToggle.textContent = trimOn
+        ? `Trim ${job.trimStart || '0'} - ${job.trimEnd || 'end'}`
+        : '+ Trim';
+    }
+  }
+
+  function startDrag(which, ev) {
+    ev.preventDefault();
+    const handle = which === 'in' ? handleIn : handleOut;
+    handle.classList.add('dragging');
+    const rect = timeline.getBoundingClientRect();
+    const onMove = (e) => {
+      const x = (e.clientX != null ? e.clientX : (e.touches && e.touches[0] && e.touches[0].clientX)) || 0;
+      let pct = (x - rect.left) / rect.width;
+      pct = Math.max(0, Math.min(1, pct));
+      const t = pct * duration;
+      if (which === 'in') {
+        startSec = Math.min(t, endSec - 0.1);
+        setPreviewToTime(startSec);
+      } else {
+        endSec = Math.max(t, startSec + 0.1);
+        setPreviewToTime(endSec);
+      }
+      paint();
+    };
+    const onUp = () => {
+      handle.classList.remove('dragging');
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      commit();
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }
+
+  handleIn.addEventListener('pointerdown', (e) => startDrag('in', e));
+  handleOut.addEventListener('pointerdown', (e) => startDrag('out', e));
+
+  // Click on the timeline outside the handles moves the nearest handle
+  timeline.addEventListener('pointerdown', (e) => {
+    if (e.target === handleIn || e.target === handleOut) return;
+    if (e.target.closest('[data-trim-handle]')) return;
+    const rect = timeline.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    const t = pct * duration;
+    const distIn = Math.abs(t - startSec);
+    const distOut = Math.abs(t - endSec);
+    if (distIn <= distOut) {
+      startSec = Math.min(t, endSec - 0.1);
+      setPreviewToTime(startSec);
+    } else {
+      endSec = Math.max(t, startSec + 0.1);
+      setPreviewToTime(endSec);
+    }
+    paint();
+    commit();
+  });
+
+  setPreviewToTime(startSec);
+  paint();
 }
 
 function formatTimestamp(seconds) {
