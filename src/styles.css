@@ -173,9 +173,11 @@ select:focus { border-color: var(--accent); }
 .dl-status.cancelled { background: rgba(239,68,68,0.1); color: #888; }
 
 .dl-error { font-family: var(--mono); font-size: 10.5px; color: var(--danger); padding: 4px 8px; background: rgba(239,68,68,0.08); border-radius: 6px; white-space: pre-wrap; word-break: break-word; line-height: 1.45; }
-.dl-trim-toggle { background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 4px; cursor: pointer; transition: all 0.12s; }
-.dl-trim-toggle:hover { border-color: var(--accent); color: var(--accent-h); }
-.dl-trim-toggle.on { background: rgba(99,102,241,0.15); border-color: var(--accent); color: var(--accent-h); }
+.dl-trim-toggle { background: rgba(99,102,241,0.12); border: 1px solid var(--accent); color: var(--accent-h); font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 6px; cursor: pointer; transition: all 0.15s; letter-spacing: 0.04em; display: inline-flex; align-items: center; gap: 5px; }
+.dl-trim-toggle::before { content: "\2702"; font-size: 12px; opacity: 0.85; }
+.dl-trim-toggle:hover { background: var(--accent); color: #fff; transform: translateY(-1px); box-shadow: 0 2px 8px rgba(99,102,241,0.4); }
+.dl-trim-toggle.on { background: var(--accent); color: #fff; box-shadow: 0 0 0 1px var(--accent-h), 0 2px 6px rgba(99,102,241,0.5); }
+.dl-trim-toggle.on::before { content: "\2713"; }
 .dl-trim-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
 .dl-trim-row label { font-family: var(--mono); font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
 .dl-trim-row input { width: 96px; padding: 4px 8px; font-size: 11px; font-family: var(--mono); }

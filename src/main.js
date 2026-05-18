@@ -963,49 +963,54 @@ const thumbCache = new Map(); // jobInputPath -> [{path, timeSeconds}]
 const thumbInflight = new Map(); // jobInputPath -> Promise<thumbs>
 
 // Listen once for streamed thumbnail-ready events
-let thumbStreamSubscribed = false;
+let thumbStreamSubscribePromise = null;
 function subscribeThumbnailStream() {
-  if (thumbStreamSubscribed) return;
-  thumbStreamSubscribed = true;
-  listen('thumbnail-ready', (e) => {
+  if (thumbStreamSubscribePromise) return thumbStreamSubscribePromise;
+  thumbStreamSubscribePromise = listen('thumbnail-ready', (e) => {
     const p = e.payload || {};
     const inputPath = p.inputPath;
     const index = p.index;
     if (inputPath == null || index == null) return;
     const convertFileSrc = (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.convertFileSrc) || ((x) => x);
     // Fill the slot
-    document.querySelectorAll(`[data-trim-thumb][data-input-key="${cssEscapeKey(inputPath)}"][data-index="${index}"]`)
-      .forEach(slot => {
-        slot.style.backgroundImage = `url("${convertFileSrc(p.path)}")`;
-        slot.classList.add('loaded');
-        // If this slot's editor has no preview image yet, seed it now
-        const editor = slot.closest('[data-trim-editor]');
-        if (editor) {
-          const preview = editor.querySelector('[data-trim-preview-img]');
-          if (preview && !preview.style.backgroundImage) {
-            preview.style.backgroundImage = slot.style.backgroundImage;
-          }
+    const selector = `[data-trim-thumb][data-input-key="${cssEscapeKey(inputPath)}"][data-index="${index}"]`;
+    const slots = document.querySelectorAll(selector);
+    slots.forEach(slot => {
+      slot.style.backgroundImage = `url("${convertFileSrc(p.path)}")`;
+      slot.classList.add('loaded');
+      const editor = slot.closest('[data-trim-editor]');
+      if (editor) {
+        const preview = editor.querySelector('[data-trim-preview-img]');
+        if (preview && !preview.style.backgroundImage) {
+          preview.style.backgroundImage = slot.style.backgroundImage;
         }
-      });
+      }
+    });
+  }).catch(err => {
+    dlog('error', 'Thumbnail event subscription failed: ' + err);
+    thumbStreamSubscribePromise = null;
   });
+  return thumbStreamSubscribePromise;
 }
 function cssEscapeKey(s) {
   return String(s).replace(/["\\]/g, '\\$&');
 }
 
 async function ensureThumbnailsForJob(job, editorEl) {
-  subscribeThumbnailStream();
+  // Await the subscription so we do not miss the first events when extract_thumbnails
+  // fires them faster than the listener can register.
+  await subscribeThumbnailStream();
 
   const cached = thumbCache.get(job.inputPath);
   // Render the timeline scaffolding RIGHT NOW so the user sees the editor instantly.
-  // Cached thumbs (or already-loaded paths) will populate slots inline; missing ones
-  // will fill in as `thumbnail-ready` events stream from Rust.
   renderTrimTimeline(job, editorEl, cached || null);
 
   if (cached) return cached;
 
   let pending = thumbInflight.get(job.inputPath);
   if (!pending) {
+    const t0 = performance.now();
+    dlog('info', `Extracting ${THUMB_COUNT} thumbnails for ${job.filename} (${job.duration ? job.duration.toFixed(1) : '?'}s)`);
     pending = invoke('extract_thumbnails', {
       inputPath: job.inputPath,
       count: THUMB_COUNT,
@@ -1013,10 +1018,11 @@ async function ensureThumbnailsForJob(job, editorEl) {
     }).then(thumbs => {
       thumbCache.set(job.inputPath, thumbs);
       thumbInflight.delete(job.inputPath);
-      dlog('info', `Generated ${thumbs.length} preview thumbnails for ${job.filename}`);
+      dlog('info', `Generated ${thumbs.length} thumbnails for ${job.filename} in ${((performance.now() - t0) / 1000).toFixed(2)}s`);
       return thumbs;
     }).catch(e => {
       thumbInflight.delete(job.inputPath);
+      dlog('error', `Thumbnail extraction failed for ${job.filename}: ${e}`);
       throw e;
     });
     thumbInflight.set(job.inputPath, pending);
