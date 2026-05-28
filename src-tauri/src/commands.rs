@@ -162,6 +162,15 @@ pub async fn show_in_folder(path: String) -> Result<(), String> {
 pub struct Thumbnail {
     pub path: String,
     pub time_seconds: f64,
+    /// data:image/jpeg;base64,... - lets the webview render the thumb without the asset protocol.
+    pub data_url: String,
+}
+
+fn jpeg_to_data_url(path: &std::path::Path) -> Option<String> {
+    use base64::{engine::general_purpose, Engine as _};
+    let bytes = std::fs::read(path).ok()?;
+    let b64 = general_purpose::STANDARD.encode(&bytes);
+    Some(format!("data:image/jpeg;base64,{}", b64))
 }
 
 #[tauri::command]
@@ -229,13 +238,14 @@ pub async fn extract_thumbnails(
                     .await
                     .map_err(|e| format!("spawn ffmpeg: {}", e))?;
                 if !result.status.success() {
-                    return Err::<(u32, std::path::PathBuf, f64), String>(format!(
+                    return Err::<(u32, std::path::PathBuf, f64, String), String>(format!(
                         "ffmpeg thumbnail failed at {:.2}s: {}",
                         t,
                         String::from_utf8_lossy(&result.stderr)
                     ));
                 }
             }
+            let data_url = jpeg_to_data_url(&thumb_path).unwrap_or_default();
             // Emit progressive event keyed by the source input path so the UI can route it.
             let _ = app_clone.emit(
                 "thumbnail-ready",
@@ -244,13 +254,14 @@ pub async fn extract_thumbnails(
                     "index": i,
                     "path": thumb_path.to_string_lossy().to_string(),
                     "timeSeconds": t,
+                    "dataUrl": data_url,
                 }),
             );
-            Ok::<(u32, std::path::PathBuf, f64), String>((i, thumb_path, t))
+            Ok::<(u32, std::path::PathBuf, f64, String), String>((i, thumb_path, t, data_url))
         });
     }
 
-    let mut results: Vec<(u32, std::path::PathBuf, f64)> = Vec::with_capacity(count as usize);
+    let mut results: Vec<(u32, std::path::PathBuf, f64, String)> = Vec::with_capacity(count as usize);
     while let Some(joined) = set.join_next().await {
         match joined {
             Ok(Ok(t)) => results.push(t),
@@ -261,9 +272,10 @@ pub async fn extract_thumbnails(
     results.sort_by_key(|r| r.0);
     Ok(results
         .into_iter()
-        .map(|(_, p, t)| Thumbnail {
+        .map(|(_, p, t, du)| Thumbnail {
             path: p.to_string_lossy().to_string(),
             time_seconds: t,
+            data_url: du,
         })
         .collect())
 }
@@ -332,6 +344,38 @@ pub async fn list_media_files(path: String) -> Result<Vec<WatchEntry>, String> {
         }
     }
     Ok(out)
+}
+
+#[tauri::command]
+pub async fn open_with_default_app(path: String) -> Result<(), String> {
+    let p = std::path::PathBuf::from(&path);
+    if !p.exists() {
+        return Err("File not found".into());
+    }
+    #[cfg(windows)]
+    {
+        // `start` is a cmd builtin so we shell out via cmd /C.
+        // First arg "" is the window title (required because start treats the first quoted arg as title).
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", p.to_string_lossy().as_ref()])
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(p.to_string_lossy().to_string())
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(p.to_string_lossy().to_string())
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

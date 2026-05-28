@@ -971,12 +971,12 @@ function subscribeThumbnailStream() {
     const inputPath = p.inputPath;
     const index = p.index;
     if (inputPath == null || index == null) return;
-    const convertFileSrc = (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.convertFileSrc) || ((x) => x);
-    // Fill the slot
+    const url = p.dataUrl || '';
+    if (!url) return;
     const selector = `[data-trim-thumb][data-input-key="${cssEscapeKey(inputPath)}"][data-index="${index}"]`;
     const slots = document.querySelectorAll(selector);
     slots.forEach(slot => {
-      slot.style.backgroundImage = `url("${convertFileSrc(p.path)}")`;
+      slot.style.backgroundImage = `url("${url}")`;
       slot.classList.add('loaded');
       const editor = slot.closest('[data-trim-editor]');
       if (editor) {
@@ -1045,9 +1045,9 @@ function nearestThumb(thumbs, targetSec) {
 }
 
 function renderTrimTimeline(job, editorEl, thumbs) {
-  const convertFileSrc = (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.convertFileSrc) || ((p) => p);
   const duration = job.duration;
   const inputKey = cssEscapeKey(job.inputPath);
+  const thumbUrl = (t) => (t && (t.dataUrl || t.data_url)) || '';
 
   // Initialize trim values if unset
   let startSec = parseTimeToSeconds(job.trimStart);
@@ -1059,11 +1059,9 @@ function renderTrimTimeline(job, editorEl, thumbs) {
   // Build slot HTML: cached thumbs already populated, others wait for the streamed event.
   const slots = [];
   for (let i = 0; i < THUMB_COUNT; i++) {
-    let bg = '';
-    if (thumbs && thumbs[i]) {
-      bg = `style="background-image:url('${convertFileSrc(thumbs[i].path)}')"`;
-    }
-    slots.push(`<div class="dl-trim-thumb${thumbs && thumbs[i] ? ' loaded' : ''}" data-trim-thumb data-input-key="${inputKey}" data-index="${i}" ${bg}></div>`);
+    const url = thumbs && thumbs[i] ? thumbUrl(thumbs[i]) : '';
+    const bg = url ? `style="background-image:url('${url}')"` : '';
+    slots.push(`<div class="dl-trim-thumb${url ? ' loaded' : ''}" data-trim-thumb data-input-key="${inputKey}" data-index="${i}" ${bg}></div>`);
   }
 
   editorEl.innerHTML = `
@@ -1089,6 +1087,7 @@ function renderTrimTimeline(job, editorEl, thumbs) {
       <span>IN <span class="trim-label-in" data-trim-in-label></span></span>
       <span>OUT <span class="trim-label-out" data-trim-out-label></span></span>
       <span>Trimmed length <span class="trim-len" data-trim-len-label></span></span>
+      <button class="btn btn-ghost btn-sm" data-trim-play-btn title="Open the file in your default video player (VLC, Movies &amp; TV, etc.) to scrub through it">&#9658; Preview in player</button>
       <button class="btn btn-ghost btn-sm" data-action="trim-clear">Reset</button>
     </div>
   `;
@@ -1112,6 +1111,20 @@ function renderTrimTimeline(job, editorEl, thumbs) {
     job.trimExpanded = false;
     renderJobs();
   });
+
+  // Preview in default player
+  const playBtn = editorEl.querySelector('[data-trim-play-btn]');
+  if (playBtn) {
+    playBtn.addEventListener('click', async () => {
+      try {
+        await invoke('open_with_default_app', { path: job.inputPath });
+        dlog('event', `Opened in default player: ${job.filename}`);
+      } catch (e) {
+        dlog('error', `Open in player failed: ${e}`);
+        toast('Open failed', String(e), 'error');
+      }
+    });
+  }
 
   function setPreviewToTime(t) {
     previewTime.textContent = formatTimestamp(t);

@@ -15,7 +15,7 @@ name = "format-reaper"
 path = "src/main.rs"
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset"] }
+tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
@@ -24,6 +24,7 @@ tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 dirs-next = "2"
+base64 = "0.22"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
