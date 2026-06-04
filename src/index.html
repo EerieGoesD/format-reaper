@@ -157,7 +157,9 @@
               <input type="number" id="targetSizeMb" value="0" min="0" max="100000" />
             </div>
             <div class="form-group">
-              <label data-i18n="label.encPreset">Preset</label>
+              <label><span data-i18n="label.encPreset">Preset</span>
+                <span class="setting-tooltip" data-i18n-tip="tip.encPreset" data-tip="FFmpeg encoder preset. Trades encode speed for file size at the same quality (CRF).&#10;&#10;ultrafast - encodes ~10x faster, ~70% bigger file&#10;veryfast  - ~4x faster, ~25% bigger&#10;medium    - baseline (default)&#10;slow      - ~30% slower, ~5% smaller&#10;veryslow  - 5x slower, ~15% smaller&#10;&#10;Quality is the SAME at every preset - only speed and size change. Hardware encoders (NVENC / QSV / AMF) ignore most values and only honor fast / medium / slow.">?</span>
+              </label>
               <select id="preset">
                 <option value="ultrafast">Ultrafast</option>
                 <option value="superfast">Superfast</option>
