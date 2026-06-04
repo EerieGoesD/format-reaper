@@ -166,6 +166,53 @@ pub struct Thumbnail {
     pub data_url: String,
 }
 
+#[tauri::command]
+pub async fn extract_single_frame(
+    input_path: String,
+    time_seconds: f64,
+) -> Result<String, String> {
+    use base64::{engine::general_purpose, Engine as _};
+    use std::process::Stdio;
+    use tokio::process::Command;
+
+    let mut cmd = Command::new("ffmpeg");
+    cmd.args([
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-ss",
+        &format!("{:.3}", time_seconds.max(0.0)),
+        "-i",
+        &input_path,
+        "-frames:v",
+        "1",
+        "-vf",
+        "scale=320:-2:flags=fast_bilinear",
+        "-q:v",
+        "5",
+        "-f",
+        "image2pipe",
+        "-vcodec",
+        "mjpeg",
+        "pipe:1",
+    ]);
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000);
+
+    let output = cmd.output().await.map_err(|e| format!("spawn ffmpeg: {}", e))?;
+    if !output.status.success() || output.stdout.is_empty() {
+        return Err(format!(
+            "ffmpeg frame extract failed at {:.2}s: {}",
+            time_seconds,
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let b64 = general_purpose::STANDARD.encode(&output.stdout);
+    Ok(format!("data:image/jpeg;base64,{}", b64))
+}
+
 fn jpeg_to_data_url(path: &std::path::Path) -> Option<String> {
     use base64::{engine::general_purpose, Engine as _};
     let bytes = std::fs::read(path).ok()?;

@@ -23,6 +23,7 @@ pub fn run() {
             commands::reveal_file,
             commands::list_media_files,
             commands::extract_thumbnails,
+            commands::extract_single_frame,
             commands::open_with_default_app,
         ])
         .run(tauri::generate_context!())

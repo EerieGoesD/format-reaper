@@ -1130,16 +1130,16 @@ function renderTrimTimeline(job, editorEl, thumbs) {
     });
   }
 
-  function setPreviewToTime(t) {
-    previewTime.textContent = formatTimestamp(t);
-    // Look up nearest loaded slot in the DOM (handles cached + streamed thumbs uniformly)
+  // Scrub state for this editor instance
+  let scrubInFlight = false;
+  let scrubPendingTime = null;
+  let scrubLatestId = 0;
+  const exactFrameCache = new Map(); // time-rounded -> data URL
+
+  function snapPreviewToNearest(t) {
     const slots = editorEl.querySelectorAll('[data-trim-thumb].loaded');
-    if (slots.length === 0) {
-      previewImg.style.backgroundImage = '';
-      return;
-    }
+    if (slots.length === 0) return false;
     const idx = Math.min(slots.length - 1, Math.max(0, Math.round((t / duration) * (THUMB_COUNT - 1))));
-    // slots are ordered by index attr but may not be all loaded; find the loaded one closest by index
     let best = slots[0];
     let bestDiff = Infinity;
     slots.forEach(s => {
@@ -1148,6 +1148,57 @@ function renderTrimTimeline(job, editorEl, thumbs) {
       if (d < bestDiff) { bestDiff = d; best = s; }
     });
     previewImg.style.backgroundImage = best.style.backgroundImage;
+    return true;
+  }
+
+  async function fetchExactFrame(t) {
+    const key = t.toFixed(2);
+    if (exactFrameCache.has(key)) return exactFrameCache.get(key);
+    const dataUrl = await invoke('extract_single_frame', {
+      inputPath: job.inputPath,
+      timeSeconds: t,
+    });
+    exactFrameCache.set(key, dataUrl);
+    if (exactFrameCache.size > 200) {
+      // simple LRU-ish: drop the first-inserted entry
+      const firstKey = exactFrameCache.keys().next().value;
+      exactFrameCache.delete(firstKey);
+    }
+    return dataUrl;
+  }
+
+  async function setPreviewToTime(t) {
+    previewTime.textContent = formatTimestamp(t);
+
+    // 1. Instant feedback: snap to the nearest pre-rendered thumb so the user
+    //    sees SOMETHING within 1 frame of moving.
+    snapPreviewToNearest(t);
+
+    // 2. Exact frame: kick off ffmpeg to extract the exact frame at this time.
+    //    Throttle to one in-flight at a time; the latest pending request always wins.
+    if (scrubInFlight) {
+      scrubPendingTime = t;
+      return;
+    }
+    scrubInFlight = true;
+    const myId = ++scrubLatestId;
+    try {
+      const dataUrl = await fetchExactFrame(t);
+      if (myId === scrubLatestId && dataUrl) {
+        previewImg.style.backgroundImage = `url("${dataUrl}")`;
+      }
+    } catch (e) {
+      // silent - keep the snap-thumb
+    } finally {
+      scrubInFlight = false;
+      if (scrubPendingTime != null && scrubPendingTime !== t) {
+        const next = scrubPendingTime;
+        scrubPendingTime = null;
+        setPreviewToTime(next);
+      } else {
+        scrubPendingTime = null;
+      }
+    }
   }
 
   function paint() {
