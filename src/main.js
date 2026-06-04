@@ -38,7 +38,7 @@ const I18N = {
     'status.ffmpegOk': 'FFmpeg detected', 'status.ffmpegMissingPrefix': 'FFmpeg not found - ', 'install.link': 'install',
     'status.running': 'Running', 'status.queued': 'Queued', 'status.completed': 'Completed',
     'status.failed': 'Failed', 'status.cancelled': 'Cancelled', 'status.pending': 'Pending',
-    'tip.crf': 'What CRF should I use?\n\n0  - lossless (huge file)\n16 - archive quality\n18 - visually identical to source\n20 - excellent\n23 - good (FFmpeg default)\n28 - acceptable, small file\n51 - worst\n\nLower number = better quality + larger file. Each +6 roughly doubles the file size.\n\nOnly applies to libx264 / libx265. Ignored when "Fit to size" or "Bitrate" is set.',
+    'tip.crf': 'CRF = Constant Rate Factor. FFmpeg picks the bitrate automatically to keep this perceived quality steady throughout the video.\n\nWhat number should I use?\n\n0  - lossless (huge file)\n16 - archive quality\n18 - visually identical to source\n20 - excellent\n23 - good (FFmpeg default)\n28 - acceptable, small file\n51 - worst\n\nLower number = better quality + larger file. Each +6 roughly doubles the file size.\n\nOnly applies to libx264 / libx265. Ignored when "Fit to size" or "Bitrate" is set.',
     'tip.bitrate': 'Target video bitrate in kilobits per second. 0 = use CRF (recommended). Higher = better quality, larger file.',
     'tip.fitToSize': 'Target final file size in megabytes. Format Reaper computes the bitrate needed to hit this size (with a 5% safety margin) and overrides CRF/Bitrate. 0 = disabled. Common targets: 8 (free Discord), 25 (Nitro Basic), 50 (Nitro), 100 (Reddit), 4096 (Instagram Reels cap).',
     'tip.vertical': 'Reels / TikTok / Shorts output.\nOff: keep original aspect.\nCenter crop: crops the sides off (loses content).\nBlurred fit: scales to fit + blurred zoomed background fills the bars (Premiere style, keeps everything visible).\nOutput always 1080x1920.',
@@ -85,7 +85,7 @@ const I18N = {
     'status.ffmpegOk': 'FFmpeg detetado', 'status.ffmpegMissingPrefix': 'FFmpeg não encontrado - ', 'install.link': 'instalar',
     'status.running': 'A converter', 'status.queued': 'Em fila', 'status.completed': 'Concluído',
     'status.failed': 'Falhou', 'status.cancelled': 'Cancelado', 'status.pending': 'Pendente',
-    'tip.crf': 'Que CRF devo usar?\n\n0  - sem perdas (ficheiro enorme)\n16 - qualidade de arquivo\n18 - visualmente idêntico à fonte\n20 - excelente\n23 - bom (predefinição FFmpeg)\n28 - aceitável, ficheiro pequeno\n51 - pior\n\nNúmero mais baixo = melhor qualidade + ficheiro maior. Cada +6 duplica aproximadamente o tamanho.\n\nSó se aplica a libx264 / libx265. Ignorado se "Tamanho-alvo" ou "Taxa de bits" estiverem definidos.',
+    'tip.crf': 'CRF = Constant Rate Factor (Fator de Taxa Constante). O FFmpeg escolhe a taxa de bits automaticamente para manter esta qualidade percebida estável ao longo de todo o vídeo.\n\nQue número devo usar?\n\n0  - sem perdas (ficheiro enorme)\n16 - qualidade de arquivo\n18 - visualmente idêntico à fonte\n20 - excelente\n23 - bom (predefinição FFmpeg)\n28 - aceitável, ficheiro pequeno\n51 - pior\n\nNúmero mais baixo = melhor qualidade + ficheiro maior. Cada +6 duplica aproximadamente o tamanho.\n\nSó se aplica a libx264 / libx265. Ignorado se "Tamanho-alvo" ou "Taxa de bits" estiverem definidos.',
     'tip.bitrate': 'Taxa de bits de vídeo em kilobits por segundo. 0 = usar CRF (recomendado). Mais alto = melhor qualidade, ficheiro maior.',
     'tip.fitToSize': 'Tamanho final do ficheiro em megabytes. O Format Reaper calcula a taxa de bits necessária para atingir este tamanho (com 5% de margem) e ignora CRF/Bitrate. 0 = desativado. Valores comuns: 8 (Discord grátis), 25 (Nitro Basic), 50 (Nitro), 100 (Reddit), 4096 (limite Reels do Instagram).',
     'tip.vertical': 'Saída para Reels / TikTok / Shorts.\nOff: mantém o aspeto original.\nCenter crop: corta as laterais (perde conteúdo).\nBlurred fit: ajusta à largura + fundo desfocado preenche as barras (estilo Premiere, mantém tudo visível).\nSaída sempre a 1080x1920.',
@@ -140,6 +140,20 @@ function applyLanguage(lang) {
 document.querySelectorAll('.lang-switcher button').forEach(btn => {
   btn.addEventListener('click', () => applyLanguage(btn.dataset.lang));
 });
+
+// Clamp every numeric input that declares min/max on change/blur, so a user can't
+// type 99999999 into Bitrate or Target size and watch the conversion explode.
+document.addEventListener('change', (e) => {
+  const el = e.target;
+  if (!(el instanceof HTMLInputElement) || el.type !== 'number') return;
+  const min = el.min !== '' ? parseFloat(el.min) : -Infinity;
+  const max = el.max !== '' ? parseFloat(el.max) : Infinity;
+  if (el.value === '') return;
+  const n = parseFloat(el.value);
+  if (!isFinite(n)) { el.value = String(Math.max(0, isFinite(min) ? min : 0)); return; }
+  if (n < min) el.value = String(min);
+  else if (n > max) el.value = String(max);
+}, true);
 
 // State
 let jobs = [];
