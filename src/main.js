@@ -4,6 +4,112 @@ const dialog = window.__TAURI__.dialog;
 const webviewWindow = window.__TAURI__.webviewWindow;
 const tauriEvent = window.__TAURI__.event;
 
+// ── i18n ──
+const I18N = {
+  en: {
+    'nav.convert': 'Convert', 'nav.history': 'History', 'nav.settings': 'Settings', 'nav.debug': 'Debug',
+    'btn.addFiles': 'Add Files', 'btn.addFolder': 'Add Folder',
+    'btn.convertAll': 'Convert All', 'btn.cancelAll': 'Cancel All', 'btn.clearCompleted': 'Clear Completed',
+    'btn.reset': 'Reset', 'btn.browse': 'Browse', 'btn.recheck': 'Re-check', 'btn.download': 'Download',
+    'btn.save': 'Save', 'btn.cancel': 'Cancel', 'btn.close': 'Close',
+    'btn.play': '▶ Play', 'btn.pause': '⏸ Pause', 'btn.playRange': 'Play IN to OUT',
+    'btn.previewInPlayer': '▶ Preview in player',
+    'btn.saveAs': '+ Save as...', 'btn.delete': 'Delete',
+    'btn.addFolderWatch': '+ Add folder', 'btn.copyAll': 'Copy All', 'btn.export': 'Export', 'btn.clear': 'Clear',
+    'btn.retry': 'Retry', 'btn.remove': 'Remove', 'btn.trim': '+ Trim',
+    'hint.dropFiles': 'or drop files anywhere in the window',
+    'label.preset': 'Preset:', 'label.outputFormat': 'Output Format', 'label.outputFolder': 'Output Folder',
+    'label.videoCodec': 'Video Codec', 'label.quality': 'Quality (CRF)', 'label.bitrate': 'Bitrate (kbps)',
+    'label.fitToSize': 'Fit to size (MB)', 'label.encPreset': 'Preset', 'label.resolution': 'Resolution',
+    'label.vertical': 'Vertical 9:16', 'label.fps': 'Frame Rate',
+    'label.audioCodec': 'Audio Codec', 'label.audioBitrate': 'Audio Bitrate (kbps)',
+    'label.imageQuality': 'Image Quality',
+    'toggle.lossless': 'Lossless', 'toggle.iphone': 'iPhone / iPad compatible',
+    'toggle.stripMetadata': 'Strip metadata', 'toggle.hw': 'Hardware acceleration',
+    'toggle.deinterlace': 'Deinterlace', 'toggle.noAudio': 'No audio',
+    'footer.madeBy': 'Made by', 'footer.support': 'Support This Project',
+    'footer.report': 'Report Issue', 'footer.suggest': 'Suggest Feature',
+    'footer.running': '{n} running', 'footer.queued': '{n} queued', 'footer.completed': '{n} completed',
+    'footer.saved': 'Saved {size}', 'footer.added': 'Added {size}',
+    'trim.in': 'IN', 'trim.out': 'OUT', 'trim.length': 'Trimmed length',
+    'trim.sourceDuration': 'Source duration:', 'trim.dragHint': 'Drag the green handle for IN, the red handle for OUT.',
+    'trim.generating': 'Generating preview...', 'trim.ready': 'Ready', 'trim.unavail': 'Inline preview unavailable',
+    'drop.title': 'Drop files to convert', 'drop.sub': 'Video, audio and image files supported',
+    'status.ffmpegOk': 'FFmpeg detected', 'status.ffmpegMissingPrefix': 'FFmpeg not found - ', 'install.link': 'install',
+    'status.running': 'Running', 'status.queued': 'Queued', 'status.completed': 'Completed',
+    'status.failed': 'Failed', 'status.cancelled': 'Cancelled', 'status.pending': 'Pending',
+  },
+  pt: {
+    'nav.convert': 'Converter', 'nav.history': 'Histórico', 'nav.settings': 'Definições', 'nav.debug': 'Depuração',
+    'btn.addFiles': 'Adicionar ficheiros', 'btn.addFolder': 'Adicionar pasta',
+    'btn.convertAll': 'Converter tudo', 'btn.cancelAll': 'Cancelar tudo', 'btn.clearCompleted': 'Limpar concluídos',
+    'btn.reset': 'Repor', 'btn.browse': 'Procurar', 'btn.recheck': 'Verificar novamente', 'btn.download': 'Transferir',
+    'btn.save': 'Guardar', 'btn.cancel': 'Cancelar', 'btn.close': 'Fechar',
+    'btn.play': '▶ Reproduzir', 'btn.pause': '⏸ Pausa', 'btn.playRange': 'Reproduzir IN a OUT',
+    'btn.previewInPlayer': '▶ Abrir no leitor',
+    'btn.saveAs': '+ Guardar como...', 'btn.delete': 'Eliminar',
+    'btn.addFolderWatch': '+ Adicionar pasta', 'btn.copyAll': 'Copiar tudo', 'btn.export': 'Exportar', 'btn.clear': 'Limpar',
+    'btn.retry': 'Tentar novamente', 'btn.remove': 'Remover', 'btn.trim': '+ Cortar',
+    'hint.dropFiles': 'ou larga ficheiros em qualquer parte da janela',
+    'label.preset': 'Predefinição:', 'label.outputFormat': 'Formato de saída', 'label.outputFolder': 'Pasta de saída',
+    'label.videoCodec': 'Codec de vídeo', 'label.quality': 'Qualidade (CRF)', 'label.bitrate': 'Taxa de bits (kbps)',
+    'label.fitToSize': 'Tamanho-alvo (MB)', 'label.encPreset': 'Predefinição', 'label.resolution': 'Resolução',
+    'label.vertical': 'Vertical 9:16', 'label.fps': 'Imagens por segundo',
+    'label.audioCodec': 'Codec de áudio', 'label.audioBitrate': 'Taxa de bits de áudio (kbps)',
+    'label.imageQuality': 'Qualidade da imagem',
+    'toggle.lossless': 'Sem perdas', 'toggle.iphone': 'Compatível com iPhone / iPad',
+    'toggle.stripMetadata': 'Remover metadados', 'toggle.hw': 'Aceleração por hardware',
+    'toggle.deinterlace': 'Desentrelaçar', 'toggle.noAudio': 'Sem áudio',
+    'footer.madeBy': 'Feito por', 'footer.support': 'Apoia este projeto',
+    'footer.report': 'Reportar problema', 'footer.suggest': 'Sugerir funcionalidade',
+    'footer.running': '{n} a converter', 'footer.queued': '{n} em fila', 'footer.completed': '{n} concluídos',
+    'footer.saved': 'Poupado {size}', 'footer.added': 'Adicionado {size}',
+    'trim.in': 'IN', 'trim.out': 'OUT', 'trim.length': 'Duração após corte',
+    'trim.sourceDuration': 'Duração original:', 'trim.dragHint': 'Arrasta a pega verde para IN, a vermelha para OUT.',
+    'trim.generating': 'A gerar pré-visualização...', 'trim.ready': 'Pronto', 'trim.unavail': 'Pré-visualização indisponível',
+    'drop.title': 'Larga os ficheiros para converter', 'drop.sub': 'Suporta vídeo, áudio e imagens',
+    'status.ffmpegOk': 'FFmpeg detetado', 'status.ffmpegMissingPrefix': 'FFmpeg não encontrado - ', 'install.link': 'instalar',
+    'status.running': 'A converter', 'status.queued': 'Em fila', 'status.completed': 'Concluído',
+    'status.failed': 'Falhou', 'status.cancelled': 'Cancelado', 'status.pending': 'Pendente',
+  }
+};
+
+let currentLang = localStorage.getItem('fr_lang') || 'en';
+
+function t(key, params) {
+  let str = (I18N[currentLang] && I18N[currentLang][key]);
+  if (str == null) str = (I18N.en && I18N.en[key]);
+  if (str == null) return key;
+  if (params) {
+    Object.keys(params).forEach(k => { str = str.split('{' + k + '}').join(String(params[k])); });
+  }
+  return str;
+}
+
+function applyLanguage(lang) {
+  if (lang !== 'en' && lang !== 'pt') lang = 'en';
+  currentLang = lang;
+  localStorage.setItem('fr_lang', lang);
+  document.documentElement.lang = lang === 'pt' ? 'pt' : 'en';
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('.lang-switcher button').forEach(b => {
+    b.classList.toggle('active', b.dataset.lang === lang);
+  });
+  // Force any dynamic UI to re-render with the new strings
+  if (typeof renderJobs === 'function') { try { renderJobs(); } catch {} }
+  if (typeof renderHistory === 'function' && document.getElementById('panel-history') && document.getElementById('panel-history').classList.contains('active')) {
+    try { renderHistory(); } catch {}
+  }
+  if (typeof updateFooter === 'function') { try { updateFooter(); } catch {} }
+  if (typeof checkFfmpegEnv === 'function') { try { checkFfmpegEnv(true); } catch {} }
+}
+
+document.querySelectorAll('.lang-switcher button').forEach(btn => {
+  btn.addEventListener('click', () => applyLanguage(btn.dataset.lang));
+});
+
 // State
 let jobs = [];
 let history = JSON.parse(localStorage.getItem('fr_history') || '[]');
@@ -905,7 +1011,8 @@ function renderJobs() {
 
 function renderJobHTML(job) {
   const status = job.status.toLowerCase();
-  const statusBadge = `<span class="dl-status ${status}">${job.status}</span>`;
+  const statusLabel = t('status.' + status) || job.status;
+  const statusBadge = `<span class="dl-status ${status}">${escapeHtml(statusLabel)}</span>`;
   const progress = Math.max(0, Math.min(100, job.progress || 0)).toFixed(1);
   let speedEta = '';
   if (job.status === 'Running') {
@@ -931,7 +1038,7 @@ function renderJobHTML(job) {
   let trimBlock = '';
   if (trimmable) {
     const trimOn = !!(job.trimStart || job.trimEnd);
-    trimBlock = `<button class="dl-trim-toggle ${trimOn ? 'on' : ''}" data-action="trim-toggle">${trimOn ? `Trim ${escapeHtml(job.trimStart || '0')} - ${escapeHtml(job.trimEnd || 'end')}` : '+ Trim'}</button>`;
+    trimBlock = `<button class="dl-trim-toggle ${trimOn ? 'on' : ''}" data-action="trim-toggle">${trimOn ? `${escapeHtml(t('btn.trim').replace(/^\+\s*/, ''))} ${escapeHtml(job.trimStart || '0')} - ${escapeHtml(job.trimEnd || (currentLang === 'pt' ? 'fim' : 'end'))}` : escapeHtml(t('btn.trim'))}</button>`;
   }
 
   const trimEditor = (trimmable && job.trimExpanded)
@@ -1072,16 +1179,16 @@ function renderTrimTimeline(job, editorEl, thumbs) {
     <div class="dl-trim-preview">
       <div class="dl-trim-preview-pane" data-trim-preview-pane>
         <div class="dl-trim-preview-img" data-trim-preview-img></div>
-        <div class="dl-trim-preview-status" data-trim-preview-status>Generating preview...</div>
+        <div class="dl-trim-preview-status" data-trim-preview-status>${escapeHtml(t('trim.generating'))}</div>
       </div>
       <div class="dl-trim-preview-info">
         <div class="dl-trim-preview-time" data-trim-preview-time></div>
-        <div>Source duration: <strong>${fmtTime(duration)}</strong></div>
-        <div>Drag the <span style="color:var(--success);">green</span> handle for IN, the <span style="color:var(--danger);">red</span> handle for OUT.</div>
+        <div>${escapeHtml(t('trim.sourceDuration'))} <strong>${fmtTime(duration)}</strong></div>
+        <div>${escapeHtml(t('trim.dragHint'))}</div>
         <div class="dl-trim-preview-controls" data-trim-preview-controls style="display:none;">
-          <button data-trim-play>&#9658; Play</button>
-          <button data-trim-pause disabled>&#10074;&#10074; Pause</button>
-          <button data-trim-play-range>Play IN to OUT</button>
+          <button data-trim-play>${escapeHtml(t('btn.play'))}</button>
+          <button data-trim-pause disabled>${escapeHtml(t('btn.pause'))}</button>
+          <button data-trim-play-range>${escapeHtml(t('btn.playRange'))}</button>
         </div>
       </div>
     </div>
@@ -1097,11 +1204,11 @@ function renderTrimTimeline(job, editorEl, thumbs) {
       <div class="dl-trim-handle out" data-trim-handle="out"></div>
     </div>
     <div class="dl-trim-footer">
-      <span>IN <span class="trim-label-in" data-trim-in-label></span></span>
-      <span>OUT <span class="trim-label-out" data-trim-out-label></span></span>
-      <span>Trimmed length <span class="trim-len" data-trim-len-label></span></span>
-      <button class="btn btn-ghost btn-sm" data-trim-play-btn title="Open the file in your default video player (VLC, Movies &amp; TV, etc.) to scrub through it">&#9658; Preview in player</button>
-      <button class="btn btn-ghost btn-sm" data-action="trim-clear">Reset</button>
+      <span>${escapeHtml(t('trim.in'))} <span class="trim-label-in" data-trim-in-label></span></span>
+      <span>${escapeHtml(t('trim.out'))} <span class="trim-label-out" data-trim-out-label></span></span>
+      <span>${escapeHtml(t('trim.length'))} <span class="trim-len" data-trim-len-label></span></span>
+      <button class="btn btn-ghost btn-sm" data-trim-play-btn>${escapeHtml(t('btn.previewInPlayer'))}</button>
+      <button class="btn btn-ghost btn-sm" data-action="trim-clear">${escapeHtml(t('btn.reset'))}</button>
     </div>
   `;
 
@@ -1440,13 +1547,13 @@ function updateFooter() {
   const running = jobs.filter(j => j.status === 'Running').length;
   const queued = jobs.filter(j => j.status === 'Queued').length;
   const completed = jobs.filter(j => j.status === 'Completed').length;
-  footerActive.textContent = `${running} running` + (queued > 0 ? ` / ${queued} queued` : '');
-  footerCompleted.textContent = `${completed} completed`;
+  footerActive.textContent = t('footer.running', { n: running }) + (queued > 0 ? ' / ' + t('footer.queued', { n: queued }) : '');
+  footerCompleted.textContent = t('footer.completed', { n: completed });
   const totalIn = jobs.reduce((a, j) => a + (j.status === 'Completed' ? j.inputSize : 0), 0);
   const totalOut = jobs.reduce((a, j) => a + (j.status === 'Completed' ? j.outputSize : 0), 0);
   if (totalIn > 0 && totalOut > 0) {
     const saved = totalIn - totalOut;
-    footerSaved.textContent = (saved >= 0 ? 'Saved ' : 'Added ') + fmtBytes(Math.abs(saved));
+    footerSaved.textContent = t(saved >= 0 ? 'footer.saved' : 'footer.added', { size: fmtBytes(Math.abs(saved)) });
   } else {
     footerSaved.textContent = '';
   }
@@ -1732,14 +1839,14 @@ async function checkFfmpegEnv(silent = false) {
 
   if (has) {
     ffmpegStatus.className = 'ffmpeg-status ok';
-    ffmpegStatus.appendChild(document.createTextNode('FFmpeg detected'));
-    info.appendChild(document.createTextNode('FFmpeg detected on PATH.'));
+    ffmpegStatus.appendChild(document.createTextNode(t('status.ffmpegOk')));
+    info.appendChild(document.createTextNode(t('status.ffmpegOk') + '.'));
     dlog('info', 'FFmpeg detected on PATH');
     if (!silent) toast('FFmpeg detected', 'ffmpeg and ffprobe are reachable.', 'success', 3000);
   } else {
     ffmpegStatus.className = 'ffmpeg-status missing';
-    ffmpegStatus.appendChild(document.createTextNode('FFmpeg not found - '));
-    ffmpegStatus.appendChild(makeFfmpegLink('install'));
+    ffmpegStatus.appendChild(document.createTextNode(t('status.ffmpegMissingPrefix')));
+    ffmpegStatus.appendChild(makeFfmpegLink(t('install.link')));
     info.style.color = 'var(--danger)';
     info.appendChild(document.createTextNode('Not found. Install FFmpeg ('));
     info.appendChild(makeFfmpegLink('ffmpeg.org/download'));
@@ -2067,3 +2174,4 @@ setInterval(() => { pollWatchFolders().catch(e => dlog('warn', `Watch poll error
 init();
 refreshWatchPresetSelect();
 renderWatchFolders();
+applyLanguage(currentLang);
