@@ -140,19 +140,19 @@
             </div>
             <div class="form-group">
               <label data-i18n="label.quality">Quality (CRF)
-                <span class="setting-tooltip" data-tip="Constant Rate Factor. Lower = higher quality, larger file. Range: 0 (lossless) to 51 (worst). 18 is visually lossless, 23 is default, 28 is acceptable.">?</span>
+                <span class="setting-tooltip" data-i18n-tip="tip.crf" data-tip="Constant Rate Factor. Lower = higher quality, larger file. Range: 0 (lossless) to 51 (worst). 18 is visually lossless, 23 is default, 28 is acceptable.">?</span>
               </label>
               <input type="number" id="crf" value="20" min="0" max="51" />
             </div>
             <div class="form-group">
               <label><span data-i18n="label.bitrate">Bitrate (kbps)</span>
-                <span class="setting-tooltip" data-tip="Target video bitrate in kilobits per second. 0 = use CRF (recommended). Higher = better quality, larger file.">?</span>
+                <span class="setting-tooltip" data-i18n-tip="tip.bitrate" data-tip="Target video bitrate in kilobits per second. 0 = use CRF (recommended). Higher = better quality, larger file.">?</span>
               </label>
               <input type="number" id="vbitrate" value="0" min="0" />
             </div>
             <div class="form-group">
               <label>Fit to size (MB)
-                <span class="setting-tooltip" data-tip="Target final file size in megabytes. Format Reaper computes the bitrate needed to hit this size (with a 5% safety margin) and overrides CRF/Bitrate. 0 = disabled. Common targets: 8 (free Discord), 25 (Nitro Basic), 50 (Nitro), 100 (Reddit), 4096 (Instagram Reels cap).">?</span>
+                <span class="setting-tooltip" data-i18n-tip="tip.fitToSize" data-tip="Target final file size in megabytes. Format Reaper computes the bitrate needed to hit this size (with a 5% safety margin) and overrides CRF/Bitrate. 0 = disabled. Common targets: 8 (free Discord), 25 (Nitro Basic), 50 (Nitro), 100 (Reddit), 4096 (Instagram Reels cap).">?</span>
               </label>
               <input type="number" id="targetSizeMb" value="0" min="0" />
             </div>
@@ -186,7 +186,7 @@
             </div>
             <div class="form-group">
               <label><span data-i18n="label.vertical">Vertical 9:16</span>
-                <span class="setting-tooltip" data-tip="Reels / TikTok / Shorts output.
+                <span class="setting-tooltip" data-i18n-tip="tip.vertical" data-tip="Reels / TikTok / Shorts output.
 Off: keep original aspect.
 Center crop: crops the sides off (loses content).
 Blurred fit: scales to fit + blurred zoomed background fills the bars (Premiere style, keeps everything visible).
@@ -226,7 +226,7 @@ Output always 1080x1920.">?</span>
           <div class="row" id="imageOptionsRow" style="display:none;">
             <div class="form-group">
               <label><span data-i18n="label.imageQuality">Image Quality</span>
-                <span class="setting-tooltip" data-tip="Quality level for lossy image formats. 100 = near-lossless, 1 = lowest. 85-95 is the sweet spot for JPG/WebP.">?</span>
+                <span class="setting-tooltip" data-i18n-tip="tip.imageQuality" data-tip="Quality level for lossy image formats. 100 = near-lossless, 1 = lowest. 85-95 is the sweet spot for JPG/WebP.">?</span>
               </label>
               <input type="number" id="imageQuality" value="90" min="1" max="100" />
             </div>
@@ -265,37 +265,37 @@ Output always 1080x1920.">?</span>
             <div class="inline-check" id="losslessToggleWrap">
               <div class="debug-check" id="losslessCheck"></div>
               <span><span data-i18n="toggle.lossless">Lossless</span>
-                <span class="setting-tooltip" data-tip="Convert without any quality loss. For video this disables bitrate/CRF and uses true lossless encoding (much larger files). For images, only formats that support lossless (PNG, WebP, AVIF, TIFF) will be perfect.">?</span>
+                <span class="setting-tooltip" data-i18n-tip="tip.lossless" data-tip="Convert without any quality loss. For video this disables bitrate/CRF and uses true lossless encoding (much larger files). For images, only formats that support lossless (PNG, WebP, AVIF, TIFF) will be perfect.">?</span>
               </span>
             </div>
             <div class="inline-check" id="iphoneToggleWrap">
               <div class="debug-check on" id="iphoneCheck"></div>
               <span><span data-i18n="toggle.iphone">iPhone / iPad compatible</span>
-                <span class="setting-tooltip" data-tip="Enforces playable settings on Apple devices: yuv420p pixel format, hvc1 tag for HEVC, and faststart flag so the file streams from anywhere in the timeline. Recommended for AirDrop / Photos.">?</span>
+                <span class="setting-tooltip" data-i18n-tip="tip.iphone" data-tip="Enforces playable settings on Apple devices: yuv420p pixel format, hvc1 tag for HEVC, and faststart flag so the file streams from anywhere in the timeline. Recommended for AirDrop / Photos.">?</span>
               </span>
             </div>
             <div class="inline-check" id="metadataToggleWrap">
               <div class="debug-check" id="metadataCheck"></div>
               <span><span data-i18n="toggle.stripMetadata">Strip metadata</span>
-                <span class="setting-tooltip" data-tip="Remove EXIF, GPS, camera info, encoding tags. Useful before sharing online.">?</span>
+                <span class="setting-tooltip" data-i18n-tip="tip.stripMetadata" data-tip="Remove EXIF, GPS, camera info, encoding tags. Useful before sharing online.">?</span>
               </span>
             </div>
             <div class="inline-check" id="hwToggleWrap">
               <div class="debug-check on" id="hwCheck"></div>
               <span><span data-i18n="toggle.hw">Hardware acceleration</span>
-                <span class="setting-tooltip" data-tip="Use GPU encoding when available (NVENC / QSV / VideoToolbox / VAAPI / AMF). Much faster, slightly larger files at the same quality.">?</span>
+                <span class="setting-tooltip" data-i18n-tip="tip.hw" data-tip="Use GPU encoding when available (NVENC / QSV / VideoToolbox / VAAPI / AMF). Much faster, slightly larger files at the same quality.">?</span>
               </span>
             </div>
             <div class="inline-check" id="deinterlaceToggleWrap">
               <div class="debug-check" id="deinterlaceCheck"></div>
               <span><span data-i18n="toggle.deinterlace">Deinterlace</span>
-                <span class="setting-tooltip" data-tip="Removes the combing artifacts you get from interlaced sources. Enable for MTS / M2TS / MPEG-TS camcorder footage and old DVDs. Adds the yadif filter.">?</span>
+                <span class="setting-tooltip" data-i18n-tip="tip.deinterlace" data-tip="Removes the combing artifacts you get from interlaced sources. Enable for MTS / M2TS / MPEG-TS camcorder footage and old DVDs. Adds the yadif filter.">?</span>
               </span>
             </div>
             <div class="inline-check" id="noAudioToggleWrap">
               <div class="debug-check" id="noAudioCheck"></div>
               <span><span data-i18n="toggle.noAudio">No audio</span>
-                <span class="setting-tooltip" data-tip="Strip the audio stream from the output. Useful when you want a silent clip or are going to add your own audio later. Disables all audio settings.">?</span>
+                <span class="setting-tooltip" data-i18n-tip="tip.noAudio" data-tip="Strip the audio stream from the output. Useful when you want a silent clip or are going to add your own audio later. Disables all audio settings.">?</span>
               </span>
             </div>
           </div>
@@ -391,7 +391,7 @@ Output always 1080x1920.">?</span>
           </div>
           <div class="setting-group">
             <label>Max Concurrent Conversions
-              <span class="setting-tooltip" data-tip="How many files convert in parallel. Higher = faster batch, but each one is slower. For hardware-accelerated encoding 1-2 is usually best. CPU encoding can handle more.">?</span>
+              <span class="setting-tooltip" data-i18n-tip="tip.maxConcurrent" data-tip="How many files convert in parallel. Higher = faster batch, but each one is slower. For hardware-accelerated encoding 1-2 is usually best. CPU encoding can handle more.">?</span>
             </label>
             <div class="setting-row">
               <input type="number" id="maxConcurrent" value="1" min="1" max="8" />
@@ -399,7 +399,7 @@ Output always 1080x1920.">?</span>
           </div>
           <div class="setting-group">
             <label>Watch Folders
-              <span class="setting-tooltip" data-tip="Format Reaper watches each folder while the app is open. Any new media file dropped or downloaded into the folder is auto-queued with the selected preset, and starts converting as soon as its file size stops growing. Output goes to your default output folder.">?</span>
+              <span class="setting-tooltip" data-i18n-tip="tip.watchFolders" data-tip="Format Reaper watches each folder while the app is open. Any new media file dropped or downloaded into the folder is auto-queued with the selected preset, and starts converting as soon as its file size stops growing. Output goes to your default output folder.">?</span>
             </label>
             <div id="watchFoldersList" class="watch-folders-list"></div>
             <div class="setting-row" style="margin-top:6px;">
@@ -438,7 +438,7 @@ Output always 1080x1920.">?</span>
             <div class="setting-row" style="cursor:pointer;" id="debugToggleWrap">
               <div class="debug-check" id="debugCheck"></div>
               <span style="font-size:13px;color:var(--text-dim);">Enable Debug Mode
-                <span class="setting-tooltip" data-tip="Adds a Debug panel to the sidebar with real-time logs of every FFmpeg invocation, file probe, and conversion event. The full command used for each job is logged so you can rerun it manually.">?</span>
+                <span class="setting-tooltip" data-i18n-tip="tip.debug" data-tip="Adds a Debug panel to the sidebar with real-time logs of every FFmpeg invocation, file probe, and conversion event. The full command used for each job is logged so you can rerun it manually.">?</span>
               </span>
             </div>
           </div>

@@ -38,6 +38,20 @@ const I18N = {
     'status.ffmpegOk': 'FFmpeg detected', 'status.ffmpegMissingPrefix': 'FFmpeg not found - ', 'install.link': 'install',
     'status.running': 'Running', 'status.queued': 'Queued', 'status.completed': 'Completed',
     'status.failed': 'Failed', 'status.cancelled': 'Cancelled', 'status.pending': 'Pending',
+    'tip.crf': 'Constant Rate Factor. Lower = higher quality, larger file. Range: 0 (lossless) to 51 (worst). 18 is visually lossless, 23 is default, 28 is acceptable.',
+    'tip.bitrate': 'Target video bitrate in kilobits per second. 0 = use CRF (recommended). Higher = better quality, larger file.',
+    'tip.fitToSize': 'Target final file size in megabytes. Format Reaper computes the bitrate needed to hit this size (with a 5% safety margin) and overrides CRF/Bitrate. 0 = disabled. Common targets: 8 (free Discord), 25 (Nitro Basic), 50 (Nitro), 100 (Reddit), 4096 (Instagram Reels cap).',
+    'tip.vertical': 'Reels / TikTok / Shorts output.\nOff: keep original aspect.\nCenter crop: crops the sides off (loses content).\nBlurred fit: scales to fit + blurred zoomed background fills the bars (Premiere style, keeps everything visible).\nOutput always 1080x1920.',
+    'tip.imageQuality': 'Quality level for lossy image formats. 100 = near-lossless, 1 = lowest. 85-95 is the sweet spot for JPG/WebP.',
+    'tip.lossless': 'Convert without any quality loss. For video this disables bitrate/CRF and uses true lossless encoding (much larger files). For images, only formats that support lossless (PNG, WebP, AVIF, TIFF) will be perfect.',
+    'tip.iphone': 'Enforces playable settings on Apple devices: yuv420p pixel format, hvc1 tag for HEVC, and faststart flag so the file streams from anywhere in the timeline. Recommended for AirDrop / Photos.',
+    'tip.stripMetadata': 'Remove EXIF, GPS, camera info, encoding tags. Useful before sharing online.',
+    'tip.hw': 'Use GPU encoding when available (NVENC / QSV / VideoToolbox / VAAPI / AMF). Much faster, slightly larger files at the same quality.',
+    'tip.deinterlace': 'Removes the combing artifacts you get from interlaced sources. Enable for MTS / M2TS / MPEG-TS camcorder footage and old DVDs. Adds the yadif filter.',
+    'tip.noAudio': 'Strip the audio stream from the output. Useful when you want a silent clip or are going to add your own audio later. Disables all audio settings.',
+    'tip.maxConcurrent': 'How many files convert in parallel. Higher = faster batch, but each one is slower. For hardware-accelerated encoding 1-2 is usually best. CPU encoding can handle more.',
+    'tip.watchFolders': 'Format Reaper watches each folder while the app is open. Any new media file dropped or downloaded into the folder is auto-queued with the selected preset, and starts converting as soon as its file size stops growing. Output goes to your default output folder.',
+    'tip.debug': 'Adds a Debug panel to the sidebar with real-time logs of every FFmpeg invocation, file probe, and conversion event. The full command used for each job is logged so you can rerun it manually.',
   },
   pt: {
     'nav.convert': 'Converter', 'nav.history': 'Histórico', 'nav.settings': 'Definições', 'nav.debug': 'Depuração',
@@ -71,6 +85,20 @@ const I18N = {
     'status.ffmpegOk': 'FFmpeg detetado', 'status.ffmpegMissingPrefix': 'FFmpeg não encontrado - ', 'install.link': 'instalar',
     'status.running': 'A converter', 'status.queued': 'Em fila', 'status.completed': 'Concluído',
     'status.failed': 'Falhou', 'status.cancelled': 'Cancelado', 'status.pending': 'Pendente',
+    'tip.crf': 'Constant Rate Factor. Mais baixo = melhor qualidade, ficheiro maior. Intervalo: 0 (sem perdas) a 51 (pior). 18 é visualmente sem perdas, 23 é o predefinido, 28 é aceitável.',
+    'tip.bitrate': 'Taxa de bits de vídeo em kilobits por segundo. 0 = usar CRF (recomendado). Mais alto = melhor qualidade, ficheiro maior.',
+    'tip.fitToSize': 'Tamanho final do ficheiro em megabytes. O Format Reaper calcula a taxa de bits necessária para atingir este tamanho (com 5% de margem) e ignora CRF/Bitrate. 0 = desativado. Valores comuns: 8 (Discord grátis), 25 (Nitro Basic), 50 (Nitro), 100 (Reddit), 4096 (limite Reels do Instagram).',
+    'tip.vertical': 'Saída para Reels / TikTok / Shorts.\nOff: mantém o aspeto original.\nCenter crop: corta as laterais (perde conteúdo).\nBlurred fit: ajusta à largura + fundo desfocado preenche as barras (estilo Premiere, mantém tudo visível).\nSaída sempre a 1080x1920.',
+    'tip.imageQuality': 'Nível de qualidade para formatos com perdas. 100 = quase sem perdas, 1 = mínimo. 85-95 é o ponto ideal para JPG/WebP.',
+    'tip.lossless': 'Converter sem qualquer perda de qualidade. No vídeo desativa bitrate/CRF e usa codificação verdadeiramente sem perdas (ficheiros muito maiores). Em imagens, apenas formatos que suportam sem perdas (PNG, WebP, AVIF, TIFF) ficam perfeitos.',
+    'tip.iphone': 'Força definições compatíveis com dispositivos Apple: formato de píxel yuv420p, tag hvc1 para HEVC e flag faststart para o ficheiro fazer streaming a partir de qualquer ponto. Recomendado para AirDrop / Fotos.',
+    'tip.stripMetadata': 'Remove EXIF, GPS, info da câmara e tags de codificação. Útil antes de partilhar online.',
+    'tip.hw': 'Usa codificação por GPU quando disponível (NVENC / QSV / VideoToolbox / VAAPI / AMF). Muito mais rápido, com ficheiros ligeiramente maiores para a mesma qualidade.',
+    'tip.deinterlace': 'Remove os artefactos em pente que aparecem em fontes entrelaçadas. Ativa para MTS / M2TS / MPEG-TS de câmaras de vídeo e DVDs antigos. Aplica o filtro yadif.',
+    'tip.noAudio': 'Remove o áudio do ficheiro de saída. Útil para clips silenciosos ou quando vais adicionar o teu próprio áudio. Desativa todas as definições de áudio.',
+    'tip.maxConcurrent': 'Quantos ficheiros são convertidos em paralelo. Mais alto = lote mais rápido, mas cada um demora mais. Com aceleração por hardware, 1-2 costuma ser o melhor. Em CPU podes aumentar.',
+    'tip.watchFolders': 'O Format Reaper observa cada pasta enquanto a app está aberta. Qualquer novo ficheiro de média que apareça na pasta é automaticamente colocado em fila com a predefinição escolhida e começa a converter assim que o tamanho do ficheiro estabiliza. A saída vai para a pasta predefinida.',
+    'tip.debug': 'Adiciona um painel de Depuração na barra lateral com registos em tempo real de cada invocação do FFmpeg, sondagem de ficheiros e evento de conversão. O comando completo usado em cada trabalho fica registado para o poderes voltar a executar manualmente.',
   }
 };
 
@@ -93,6 +121,9 @@ function applyLanguage(lang) {
   document.documentElement.lang = lang === 'pt' ? 'pt' : 'en';
   document.querySelectorAll('[data-i18n]').forEach(el => {
     el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-tip]').forEach(el => {
+    el.setAttribute('data-tip', t(el.dataset.i18nTip));
   });
   document.querySelectorAll('.lang-switcher button').forEach(b => {
     b.classList.toggle('active', b.dataset.lang === lang);
