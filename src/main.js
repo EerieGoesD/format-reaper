@@ -958,7 +958,7 @@ function renderJobHTML(job) {
   `;
 }
 
-const THUMB_COUNT = 16;
+const THUMB_COUNT = 32;
 const thumbCache = new Map(); // jobInputPath -> [{path, timeSeconds}]
 const thumbInflight = new Map(); // jobInputPath -> Promise<thumbs>
 
@@ -1092,6 +1092,7 @@ function renderTrimTimeline(job, editorEl, thumbs) {
       <div class="dl-trim-mask left" data-trim-mask-left></div>
       <div class="dl-trim-mask right" data-trim-mask-right></div>
       <div class="dl-trim-range-band" data-trim-range></div>
+      <div class="dl-trim-playhead" data-trim-playhead></div>
       <div class="dl-trim-handle in" data-trim-handle="in"></div>
       <div class="dl-trim-handle out" data-trim-handle="out"></div>
     </div>
@@ -1172,16 +1173,40 @@ function renderTrimTimeline(job, editorEl, thumbs) {
       previewStatus.classList.add('ready');
       setTimeout(() => previewStatus.style.display = 'none', 1500);
       previewControls.style.display = '';
+      const playhead = editorEl.querySelector('[data-trim-playhead]');
+      let playheadRaf = null;
+      const updatePlayhead = () => {
+        if (!previewVideoEl || !playhead) return;
+        const pct = (previewVideoEl.currentTime / duration) * 100;
+        playhead.style.left = pct + '%';
+        if (!previewVideoEl.paused && !previewVideoEl.ended) {
+          playheadRaf = requestAnimationFrame(updatePlayhead);
+        }
+      };
       previewVideoEl.addEventListener('loadedmetadata', () => {
         previewVideoEl.currentTime = startSec;
+        if (playhead) {
+          playhead.style.left = ((startSec / duration) * 100) + '%';
+        }
       });
       previewVideoEl.addEventListener('play', () => {
         previewControls.querySelector('[data-trim-play]').disabled = true;
         previewControls.querySelector('[data-trim-pause]').disabled = false;
+        if (playhead) playhead.classList.add('active');
+        if (playheadRaf) cancelAnimationFrame(playheadRaf);
+        playheadRaf = requestAnimationFrame(updatePlayhead);
       });
       previewVideoEl.addEventListener('pause', () => {
         previewControls.querySelector('[data-trim-play]').disabled = false;
         previewControls.querySelector('[data-trim-pause]').disabled = true;
+        if (playheadRaf) { cancelAnimationFrame(playheadRaf); playheadRaf = null; }
+        if (playhead) playhead.classList.remove('active');
+      });
+      previewVideoEl.addEventListener('seeked', () => {
+        if (playhead) {
+          const pct = (previewVideoEl.currentTime / duration) * 100;
+          playhead.style.left = pct + '%';
+        }
       });
       previewControls.querySelector('[data-trim-play]').addEventListener('click', () => {
         previewVideoEl.play().catch(() => {});
@@ -1232,15 +1257,17 @@ function renderTrimTimeline(job, editorEl, thumbs) {
   }
 
   async function fetchExactFrame(t) {
-    const key = t.toFixed(2);
+    // Round to 0.05s bins so a wiggle within ~50ms reuses the same cached frame
+    // instead of re-spawning ffmpeg. Visually indistinguishable, much smoother.
+    const key = (Math.round(t * 20) / 20).toFixed(2);
     if (exactFrameCache.has(key)) return exactFrameCache.get(key);
     const dataUrl = await invoke('extract_single_frame', {
       inputPath: job.inputPath,
       timeSeconds: t,
     });
     exactFrameCache.set(key, dataUrl);
-    if (exactFrameCache.size > 200) {
-      // simple LRU-ish: drop the first-inserted entry
+    if (exactFrameCache.size > 1000) {
+      // simple LRU-ish: drop the oldest-inserted entry
       const firstKey = exactFrameCache.keys().next().value;
       exactFrameCache.delete(firstKey);
     }

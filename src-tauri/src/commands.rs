@@ -192,11 +192,12 @@ pub async fn extract_single_frame(
         "-frames:v",
         "1",
         // Smaller preview = faster encode + smaller IPC payload.
-        // 240px wide @ 16:9 = 240x135, sharp enough for the 220px-wide preview pane.
+        // 160px wide @ 16:9 = 160x90, scaled up in CSS. The MP4 preview takes over
+        // once it is ready so we optimise this path purely for latency.
         "-vf",
-        "scale=240:-2:flags=fast_bilinear",
+        "scale=160:-2:flags=fast_bilinear",
         "-q:v",
-        "6",
+        "8",
         "-f",
         "image2pipe",
         "-vcodec",
