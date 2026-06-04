@@ -24,6 +24,8 @@ pub fn run() {
             commands::list_media_files,
             commands::extract_thumbnails,
             commands::extract_single_frame,
+            commands::generate_preview_video,
+            commands::read_file_bytes,
             commands::open_with_default_app,
         ])
         .run(tauri::generate_context!())

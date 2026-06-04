@@ -1070,11 +1070,19 @@ function renderTrimTimeline(job, editorEl, thumbs) {
 
   editorEl.innerHTML = `
     <div class="dl-trim-preview">
-      <div class="dl-trim-preview-img" data-trim-preview-img></div>
+      <div class="dl-trim-preview-pane" data-trim-preview-pane>
+        <div class="dl-trim-preview-img" data-trim-preview-img></div>
+        <div class="dl-trim-preview-status" data-trim-preview-status>Generating preview...</div>
+      </div>
       <div class="dl-trim-preview-info">
         <div class="dl-trim-preview-time" data-trim-preview-time></div>
         <div>Source duration: <strong>${fmtTime(duration)}</strong></div>
         <div>Drag the <span style="color:var(--success);">green</span> handle for IN, the <span style="color:var(--danger);">red</span> handle for OUT.</div>
+        <div class="dl-trim-preview-controls" data-trim-preview-controls style="display:none;">
+          <button data-trim-play>&#9658; Play</button>
+          <button data-trim-pause disabled>&#10074;&#10074; Pause</button>
+          <button data-trim-play-range>Play IN to OUT</button>
+        </div>
       </div>
     </div>
     <div class="dl-trim-timeline" data-trim-timeline>
@@ -1130,6 +1138,77 @@ function renderTrimTimeline(job, editorEl, thumbs) {
     });
   }
 
+  // Inline video preview - generate a webview-playable MP4 in the background,
+  // then swap the preview pane to a <video> element with native scrub support.
+  const previewPane = editorEl.querySelector('[data-trim-preview-pane]');
+  const previewStatus = editorEl.querySelector('[data-trim-preview-status]');
+  const previewControls = editorEl.querySelector('[data-trim-preview-controls]');
+  let previewVideoEl = null;
+
+  (async () => {
+    if (!previewPane) return;
+    const t0 = performance.now();
+    try {
+      dlog('info', `Generating webview preview MP4 for ${job.filename}...`);
+      const result = await invoke('generate_preview_video', { inputPath: job.inputPath });
+      const path = result && (result.path || result.Path);
+      if (!path) throw new Error('No preview path returned');
+      dlog('info', `Preview MP4 ready in ${((performance.now() - t0) / 1000).toFixed(1)}s: ${path}`);
+      const bytes = await invoke('read_file_bytes', { path });
+      const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+      const blob = new Blob([arr], { type: 'video/mp4' });
+      const url = URL.createObjectURL(blob);
+      previewVideoEl = document.createElement('video');
+      previewVideoEl.className = 'dl-trim-preview-video';
+      previewVideoEl.preload = 'auto';
+      previewVideoEl.muted = true;
+      previewVideoEl.playsInline = true;
+      previewVideoEl.src = url;
+      // Replace static image with the video
+      const imgEl = previewPane.querySelector('[data-trim-preview-img]');
+      if (imgEl) imgEl.remove();
+      previewPane.insertBefore(previewVideoEl, previewStatus);
+      previewStatus.textContent = 'Ready';
+      previewStatus.classList.add('ready');
+      setTimeout(() => previewStatus.style.display = 'none', 1500);
+      previewControls.style.display = '';
+      previewVideoEl.addEventListener('loadedmetadata', () => {
+        previewVideoEl.currentTime = startSec;
+      });
+      previewVideoEl.addEventListener('play', () => {
+        previewControls.querySelector('[data-trim-play]').disabled = true;
+        previewControls.querySelector('[data-trim-pause]').disabled = false;
+      });
+      previewVideoEl.addEventListener('pause', () => {
+        previewControls.querySelector('[data-trim-play]').disabled = false;
+        previewControls.querySelector('[data-trim-pause]').disabled = true;
+      });
+      previewControls.querySelector('[data-trim-play]').addEventListener('click', () => {
+        previewVideoEl.play().catch(() => {});
+      });
+      previewControls.querySelector('[data-trim-pause]').addEventListener('click', () => {
+        previewVideoEl.pause();
+      });
+      previewControls.querySelector('[data-trim-play-range]').addEventListener('click', () => {
+        previewVideoEl.currentTime = startSec;
+        previewVideoEl.play().catch(() => {});
+        const stopAt = () => {
+          if (previewVideoEl.currentTime >= endSec) {
+            previewVideoEl.pause();
+            previewVideoEl.removeEventListener('timeupdate', stopAt);
+          }
+        };
+        previewVideoEl.addEventListener('timeupdate', stopAt);
+      });
+    } catch (e) {
+      dlog('warn', `Inline video preview unavailable: ${e}`);
+      if (previewStatus) {
+        previewStatus.textContent = 'Inline preview unavailable';
+        previewStatus.style.background = 'rgba(239,68,68,0.7)';
+      }
+    }
+  })();
+
   // Scrub state for this editor instance
   let scrubInFlight = false;
   let scrubPendingTime = null;
@@ -1147,7 +1226,8 @@ function renderTrimTimeline(job, editorEl, thumbs) {
       const d = Math.abs(si - idx);
       if (d < bestDiff) { bestDiff = d; best = s; }
     });
-    previewImg.style.backgroundImage = best.style.backgroundImage;
+    const imgEl = editorEl.querySelector('[data-trim-preview-img]');
+    if (imgEl) imgEl.style.backgroundImage = best.style.backgroundImage;
     return true;
   }
 
@@ -1170,12 +1250,14 @@ function renderTrimTimeline(job, editorEl, thumbs) {
   async function setPreviewToTime(t) {
     previewTime.textContent = formatTimestamp(t);
 
-    // 1. Instant feedback: snap to the nearest pre-rendered thumb so the user
-    //    sees SOMETHING within 1 frame of moving.
-    snapPreviewToNearest(t);
+    // If the inline video is ready, seek it - native, frame-accurate, instant.
+    if (previewVideoEl && previewVideoEl.readyState >= 1) {
+      try { previewVideoEl.currentTime = Math.max(0, Math.min(duration, t)); } catch {}
+      return;
+    }
 
-    // 2. Exact frame: kick off ffmpeg to extract the exact frame at this time.
-    //    Throttle to one in-flight at a time; the latest pending request always wins.
+    // Otherwise fall back to the two-stage thumbnail flow.
+    snapPreviewToNearest(t);
     if (scrubInFlight) {
       scrubPendingTime = t;
       return;
@@ -1185,10 +1267,11 @@ function renderTrimTimeline(job, editorEl, thumbs) {
     try {
       const dataUrl = await fetchExactFrame(t);
       if (myId === scrubLatestId && dataUrl) {
-        previewImg.style.backgroundImage = `url("${dataUrl}")`;
+        const imgEl = editorEl.querySelector('[data-trim-preview-img]');
+        if (imgEl) imgEl.style.backgroundImage = `url("${dataUrl}")`;
       }
     } catch (e) {
-      // silent - keep the snap-thumb
+      // silent
     } finally {
       scrubInFlight = false;
       if (scrubPendingTime != null && scrubPendingTime !== t) {

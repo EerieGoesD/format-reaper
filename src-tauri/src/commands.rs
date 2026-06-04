@@ -180,16 +180,23 @@ pub async fn extract_single_frame(
         "-hide_banner",
         "-loglevel",
         "error",
+        // Hardware-accelerated decode (cuda / qsv / d3d11va / videotoolbox / etc.)
+        // -hwaccel auto falls back to software if nothing is available.
+        "-hwaccel",
+        "auto",
+        // Fast seek BEFORE -i (container-level keyframe seek, ~10x faster than accurate seek)
         "-ss",
         &format!("{:.3}", time_seconds.max(0.0)),
         "-i",
         &input_path,
         "-frames:v",
         "1",
+        // Smaller preview = faster encode + smaller IPC payload.
+        // 240px wide @ 16:9 = 240x135, sharp enough for the 220px-wide preview pane.
         "-vf",
-        "scale=320:-2:flags=fast_bilinear",
+        "scale=240:-2:flags=fast_bilinear",
         "-q:v",
-        "5",
+        "6",
         "-f",
         "image2pipe",
         "-vcodec",
@@ -211,6 +218,138 @@ pub async fn extract_single_frame(
     }
     let b64 = general_purpose::STANDARD.encode(&output.stdout);
     Ok(format!("data:image/jpeg;base64,{}", b64))
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewVideo {
+    pub path: String,
+    pub size: u64,
+}
+
+#[tauri::command]
+pub async fn generate_preview_video(
+    app: tauri::AppHandle,
+    input_path: String,
+) -> Result<PreviewVideo, String> {
+    use std::process::Stdio;
+    use tokio::process::Command;
+
+    let cache_root = dirs_next::cache_dir()
+        .unwrap_or_else(|| std::env::temp_dir())
+        .join("format-reaper")
+        .join("previews");
+    std::fs::create_dir_all(&cache_root).map_err(|e| e.to_string())?;
+    let key = hash_path_key(&input_path);
+    let out_path = cache_root.join(format!("{}.mp4", key));
+
+    // Cache hit
+    if out_path.is_file() {
+        if let Ok(meta) = std::fs::metadata(&out_path) {
+            if meta.len() > 0 {
+                let _ = app.emit(
+                    "preview-video-ready",
+                    serde_json::json!({
+                        "inputPath": input_path,
+                        "path": out_path.to_string_lossy().to_string(),
+                        "size": meta.len(),
+                    }),
+                );
+                return Ok(PreviewVideo {
+                    path: out_path.to_string_lossy().to_string(),
+                    size: meta.len(),
+                });
+            }
+        }
+    }
+
+    // Pick a hardware encoder if available, fall back to libx264.
+    let venc = if has_encoder("h264_nvenc").await {
+        "h264_nvenc"
+    } else if has_encoder("h264_qsv").await {
+        "h264_qsv"
+    } else if has_encoder("h264_amf").await {
+        "h264_amf"
+    } else if has_encoder("h264_videotoolbox").await {
+        "h264_videotoolbox"
+    } else {
+        "libx264"
+    };
+
+    let mut cmd = Command::new("ffmpeg");
+    cmd.args([
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-hwaccel",
+        "auto",
+        "-y",
+        "-i",
+        &input_path,
+        "-vf",
+        "scale=480:-2:flags=fast_bilinear",
+        "-c:v",
+        venc,
+        "-preset",
+        if venc == "libx264" { "veryfast" } else { "fast" },
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "96k",
+        "-ac",
+        "2",
+        out_path.to_string_lossy().as_ref(),
+    ]);
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::piped());
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000);
+
+    let output = cmd.output().await.map_err(|e| format!("spawn ffmpeg: {}", e))?;
+    if !output.status.success() {
+        let _ = std::fs::remove_file(&out_path);
+        return Err(format!(
+            "Preview generation failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let size = std::fs::metadata(&out_path).map(|m| m.len()).unwrap_or(0);
+    let _ = app.emit(
+        "preview-video-ready",
+        serde_json::json!({
+            "inputPath": input_path,
+            "path": out_path.to_string_lossy().to_string(),
+            "size": size,
+        }),
+    );
+    Ok(PreviewVideo {
+        path: out_path.to_string_lossy().to_string(),
+        size,
+    })
+}
+
+async fn has_encoder(name: &str) -> bool {
+    use std::process::Stdio;
+    use tokio::process::Command;
+    let mut cmd = Command::new("ffmpeg");
+    cmd.args(["-hide_banner", "-encoders"]);
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::null());
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000);
+    if let Ok(out) = cmd.output().await {
+        return String::from_utf8_lossy(&out.stdout).contains(name);
+    }
+    false
+}
+
+#[tauri::command]
+pub async fn read_file_bytes(path: String) -> Result<Vec<u8>, String> {
+    std::fs::read(&path).map_err(|e| format!("read {}: {}", path, e))
 }
 
 fn jpeg_to_data_url(path: &std::path::Path) -> Option<String> {
