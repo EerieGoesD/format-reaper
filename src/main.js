@@ -658,22 +658,14 @@ function refreshToggles() {
   applyAudioDisabledState();
 }
 
-function setGroupDisabled(input, disabled, reasonKey) {
+function setGroupDisabled(input, disabled, _reasonKey) {
   if (!input) return;
   const g = input.closest('.form-group');
   if (!g) return;
   g.classList.toggle('disabled', !!disabled);
-  let hint = g.querySelector('.form-disabled-hint');
-  if (disabled && reasonKey) {
-    if (!hint) {
-      hint = document.createElement('div');
-      hint.className = 'form-disabled-hint';
-      g.appendChild(hint);
-    }
-    hint.textContent = t(reasonKey);
-  } else if (hint) {
-    hint.remove();
-  }
+  // Clean up any leftover hint elements from earlier builds.
+  const hint = g.querySelector('.form-disabled-hint');
+  if (hint) hint.remove();
 }
 
 function applyAudioDisabledState() {
