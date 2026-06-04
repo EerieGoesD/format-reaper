@@ -52,6 +52,12 @@ const I18N = {
     'tip.maxConcurrent': 'How many files convert in parallel. Higher = faster batch, but each one is slower. For hardware-accelerated encoding 1-2 is usually best. CPU encoding can handle more.',
     'tip.watchFolders': 'Format Reaper watches each folder while the app is open. Any new media file dropped or downloaded into the folder is auto-queued with the selected preset, and starts converting as soon as its file size stops growing. Output goes to your default output folder.',
     'tip.debug': 'Adds a Debug panel to the sidebar with real-time logs of every FFmpeg invocation, file probe, and conversion event. The full command used for each job is logged so you can rerun it manually.',
+    'disabled.byLossless': 'overridden by Lossless',
+    'disabled.byBitrate': 'overridden by Bitrate',
+    'disabled.byFitToSize': 'overridden by Fit to size',
+    'disabled.byCopy': 'overridden by video codec: copy',
+    'disabled.byVertical': 'overridden by Vertical 9:16',
+    'disabled.byNoAudio': 'overridden by No audio',
   },
   pt: {
     'nav.convert': 'Converter', 'nav.history': 'Histórico', 'nav.settings': 'Definições', 'nav.debug': 'Depuração',
@@ -99,6 +105,12 @@ const I18N = {
     'tip.maxConcurrent': 'Quantos ficheiros são convertidos em paralelo. Mais alto = lote mais rápido, mas cada um demora mais. Com aceleração por hardware, 1-2 costuma ser o melhor. Em CPU podes aumentar.',
     'tip.watchFolders': 'O Format Reaper observa cada pasta enquanto a app está aberta. Qualquer novo ficheiro de média que apareça na pasta é automaticamente colocado em fila com a predefinição escolhida e começa a converter assim que o tamanho do ficheiro estabiliza. A saída vai para a pasta predefinida.',
     'tip.debug': 'Adiciona um painel de Depuração na barra lateral com registos em tempo real de cada invocação do FFmpeg, sondagem de ficheiros e evento de conversão. O comando completo usado em cada trabalho fica registado para o poderes voltar a executar manualmente.',
+    'disabled.byLossless': 'ignorado por Sem perdas',
+    'disabled.byBitrate': 'ignorado pela Taxa de bits',
+    'disabled.byFitToSize': 'ignorado pelo Tamanho-alvo',
+    'disabled.byCopy': 'ignorado pelo codec de vídeo: copy',
+    'disabled.byVertical': 'ignorado por Vertical 9:16',
+    'disabled.byNoAudio': 'ignorado por Sem áudio',
   }
 };
 
@@ -135,6 +147,7 @@ function applyLanguage(lang) {
   }
   if (typeof updateFooter === 'function') { try { updateFooter(); } catch {} }
   if (typeof checkFfmpegEnv === 'function') { try { checkFfmpegEnv(true); } catch {} }
+  if (typeof updateFormConflicts === 'function') { try { updateFormConflicts(); } catch {} }
 }
 
 document.querySelectorAll('.lang-switcher button').forEach(btn => {
@@ -645,20 +658,74 @@ function refreshToggles() {
   applyAudioDisabledState();
 }
 
+function setGroupDisabled(input, disabled, reasonKey) {
+  if (!input) return;
+  const g = input.closest('.form-group');
+  if (!g) return;
+  g.classList.toggle('disabled', !!disabled);
+  let hint = g.querySelector('.form-disabled-hint');
+  if (disabled && reasonKey) {
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.className = 'form-disabled-hint';
+      g.appendChild(hint);
+    }
+    hint.textContent = t(reasonKey);
+  } else if (hint) {
+    hint.remove();
+  }
+}
+
 function applyAudioDisabledState() {
   const off = !!formState.noAudio;
-  const fmt = formatSelect.value;
-  const kind = formatKind(fmt);
-  // Video-row audio fields
-  const aCodecGroup = audioCodec.closest('.form-group');
-  const aBitrateGroup = abitrateInput.closest('.form-group');
-  if (aCodecGroup) aCodecGroup.classList.toggle('disabled', off && kind === 'video');
-  if (aBitrateGroup) aBitrateGroup.classList.toggle('disabled', off && kind === 'video');
-  // Audio-only fields
-  const aoCodecGroup = audioOnlyCodec.closest('.form-group');
-  const aoBitrateGroup = audioOnlyBitrate.closest('.form-group');
-  if (aoCodecGroup) aoCodecGroup.classList.toggle('disabled', off && kind === 'audio');
-  if (aoBitrateGroup) aoBitrateGroup.classList.toggle('disabled', off && kind === 'audio');
+  const kind = formatKind(formatSelect.value);
+  setGroupDisabled(audioCodec, off && kind === 'video', off ? 'disabled.byNoAudio' : null);
+  setGroupDisabled(abitrateInput, off && kind === 'video', off ? 'disabled.byNoAudio' : null);
+  setGroupDisabled(audioOnlyCodec, off && kind === 'audio', off ? 'disabled.byNoAudio' : null);
+  setGroupDisabled(audioOnlyBitrate, off && kind === 'audio', off ? 'disabled.byNoAudio' : null);
+}
+
+function updateFormConflicts() {
+  applyAudioDisabledState();
+  const kind = formatKind(formatSelect.value);
+  if (kind !== 'video') return;
+
+  const lossless = !!formState.lossless;
+  const targetMB = parseInt(targetSizeMbInput.value, 10) || 0;
+  const vbitrate = parseInt(vbitrateInput.value, 10) || 0;
+  const isCopy = videoCodec.value === 'copy';
+  const vmode = verticalModeSelect.value || 'off';
+  const vertOn = vmode !== 'off';
+
+  // Reason precedence: copy > lossless > fit-to-size > bitrate
+  const blanket = isCopy ? 'disabled.byCopy' : lossless ? 'disabled.byLossless' : null;
+
+  // CRF: disabled by copy, lossless, fit-to-size, or bitrate
+  let crfReason = blanket;
+  if (!crfReason && targetMB > 0) crfReason = 'disabled.byFitToSize';
+  else if (!crfReason && vbitrate > 0) crfReason = 'disabled.byBitrate';
+  setGroupDisabled(crfInput, !!crfReason, crfReason);
+
+  // Bitrate: disabled by copy, lossless, fit-to-size
+  let brReason = blanket;
+  if (!brReason && targetMB > 0) brReason = 'disabled.byFitToSize';
+  setGroupDisabled(vbitrateInput, !!brReason, brReason);
+
+  // Fit to size: disabled by copy or lossless
+  setGroupDisabled(targetSizeMbInput, !!blanket, blanket);
+
+  // Encoding preset: disabled by copy
+  setGroupDisabled(presetSelect, isCopy, isCopy ? 'disabled.byCopy' : null);
+
+  // Resolution: disabled by copy or active Vertical mode (vertical forces 1080x1920)
+  const resReason = isCopy ? 'disabled.byCopy' : vertOn ? 'disabled.byVertical' : null;
+  setGroupDisabled(resolutionSelect, !!resReason, resReason);
+
+  // FPS: disabled by copy
+  setGroupDisabled(fpsSelect, isCopy, isCopy ? 'disabled.byCopy' : null);
+
+  // Vertical mode: disabled by copy
+  setGroupDisabled(verticalModeSelect, isCopy, isCopy ? 'disabled.byCopy' : null);
 }
 
 function formatKind(fmt) {
@@ -675,17 +742,21 @@ function onFormChange() {
   videoOptionsRow2.style.display = kind === 'video' ? 'flex' : 'none';
   imageOptionsRow.style.display = kind === 'image' ? 'flex' : 'none';
   audioOptionsRow.style.display = kind === 'audio' ? 'flex' : 'none';
-  applyAudioDisabledState();
+  updateFormConflicts();
 }
 formatSelect.addEventListener('change', () => { onFormChange(); });
 videoCodec.addEventListener('change', onFormChange);
 targetSizeMbInput.addEventListener('change', () => {
   const v = parseInt(targetSizeMbInput.value, 10) || 0;
   localStorage.setItem('fr_targetSizeMb', String(v));
+  updateFormConflicts();
 });
 verticalModeSelect.addEventListener('change', () => {
   localStorage.setItem('fr_verticalMode', verticalModeSelect.value);
+  updateFormConflicts();
 });
+vbitrateInput.addEventListener('change', updateFormConflicts);
+crfInput.addEventListener('change', updateFormConflicts);
 // Restore last-used values
 targetSizeMbInput.value = String(parseInt(localStorage.getItem('fr_targetSizeMb') || '0', 10));
 verticalModeSelect.value = localStorage.getItem('fr_verticalMode') || 'off';
