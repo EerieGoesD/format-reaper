@@ -973,7 +973,7 @@ function subscribeThumbnailStream() {
     if (inputPath == null || index == null) return;
     const url = p.dataUrl || '';
     if (!url) return;
-    const selector = `[data-trim-thumb][data-input-key="${cssEscapeKey(inputPath)}"][data-index="${index}"]`;
+    const selector = `[data-trim-thumb][data-input-key="${trimKey(inputPath)}"][data-index="${index}"]`;
     const slots = document.querySelectorAll(selector);
     slots.forEach(slot => {
       slot.style.backgroundImage = `url("${url}")`;
@@ -992,8 +992,12 @@ function subscribeThumbnailStream() {
   });
   return thumbStreamSubscribePromise;
 }
-function cssEscapeKey(s) {
-  return String(s).replace(/["\\]/g, '\\$&');
+// Encode an arbitrary string to a token that is safe to use as both
+// an HTML attribute value AND a CSS attribute selector value (no quotes,
+// no backslashes, no whitespace). encodeURIComponent gives us alphanumerics +
+// "-._~!*'()" and percent-escapes the rest.
+function trimKey(s) {
+  return encodeURIComponent(String(s));
 }
 
 async function ensureThumbnailsForJob(job, editorEl) {
@@ -1046,7 +1050,7 @@ function nearestThumb(thumbs, targetSec) {
 
 function renderTrimTimeline(job, editorEl, thumbs) {
   const duration = job.duration;
-  const inputKey = cssEscapeKey(job.inputPath);
+  const inputKey = trimKey(job.inputPath);
   const thumbUrl = (t) => (t && (t.dataUrl || t.data_url)) || '';
 
   // Initialize trim values if unset
