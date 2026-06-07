@@ -9,3 +9,10 @@ src-tauri/Cargo.lock
 Thumbs.db
 .vscode/
 .idea/
+
+# MSIX build output (contains built exe, test cert, signed test package)
+msix/package/
+msix/package-test/
+msix/*.msix
+msix/*.pfx
+msix/*.cer
