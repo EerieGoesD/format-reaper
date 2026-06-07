@@ -38,9 +38,10 @@ $makeappx = Join-Path $sdkRoot "$($sdkVer.Name)\x64\makeappx.exe"
 $signtool = Join-Path $sdkRoot "$($sdkVer.Name)\x64\signtool.exe"
 
 if (-not $SkipBuild) {
-  Write-Host "==> Building release exe (npm run tauri build)..."
+  Write-Host "==> Building release exe (npx tauri build)..."
   Push-Location $repo
-  npm run tauri build
+  npx tauri build
+  if ($LASTEXITCODE -ne 0) { Pop-Location; throw "tauri build failed" }
   Pop-Location
 }
 if (-not (Test-Path $relExe)) { throw "Release exe not found at $relExe" }
