@@ -633,12 +633,17 @@ pub(crate) fn build_ffmpeg_args(input: &str, output: &str, opt: &ConversionOptio
                 args.push("-tag:v".into());
                 args.push("hvc1".into());
             }
-            args.push("-movflags".into());
-            args.push("+faststart".into());
-        } else if opt.fast_start && opt.container == "mp4" {
-            args.push("-movflags".into());
-            args.push("+faststart".into());
         }
+    }
+
+    // faststart moves the index to the front of the file so it can start playing before
+    // it has fully downloaded. It is a muxer flag, not an encoder one, so it applies to
+    // stream copies too - the old placement inside the encoder block silently skipped it
+    // for every "copy" job. Only the mp4 family has a moov atom to relocate.
+    let mp4_family = matches!(opt.container.as_str(), "mp4" | "mov" | "m4a");
+    if mp4_family && (opt.iphone_compatible || opt.fast_start) {
+        args.push("-movflags".into());
+        args.push("+faststart".into());
     }
 
     let mut filters: Vec<String> = Vec::new();
@@ -674,15 +679,20 @@ pub(crate) fn build_ffmpeg_args(input: &str, output: &str, opt: &ConversionOptio
             }
         }
     }
-    if !filters.is_empty() {
-        args.push("-vf".into());
-        args.push(filters.join(","));
-    }
-
-    if let Some(fps) = opt.fps {
-        if fps > 0.0 {
-            args.push("-r".into());
-            args.push(format!("{}", fps));
+    // ffmpeg rejects any filter alongside a stream copy ("Filtering and streamcopy
+    // cannot be used together"), and a frame rate cannot be imposed on packets that are
+    // being passed through. A stale toggle must not be able to produce a job that
+    // refuses to run, so copy drops both outright.
+    if vcodec != "copy" {
+        if !filters.is_empty() {
+            args.push("-vf".into());
+            args.push(filters.join(","));
+        }
+        if let Some(fps) = opt.fps {
+            if fps > 0.0 {
+                args.push("-r".into());
+                args.push(format!("{}", fps));
+            }
         }
     }
 

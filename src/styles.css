@@ -22,6 +22,35 @@
   --mono:     'JetBrains Mono', monospace;
 }
 
+:root[data-theme="light"] {
+  --bg:       #f5f5f7;
+  --surface:  #ffffff;
+  --surface2: #f0f0f3;
+  --border:   #e3e3e9;
+  --text:     #1b1b22;
+  --text-dim: #6a6a76;
+  --accent:   #6366f1;
+  --accent-h: #4f46e5;
+  --danger:   #ef4444;
+  --danger-h: #dc2626;
+  --success:  #16a34a;
+  --warning:  #ca9a04;
+  --orange:   #ea580c;
+  --bmc:      #ca8a04;
+}
+
+/* A handful of rules hardcode dark-theme colours. White hover text and a near-black
+   disabled chip both disappear on a light background, so they need real values here. */
+:root[data-theme="light"] .ffmpeg-status a:hover,
+:root[data-theme="light"] #ffmpegInfo a:hover,
+:root[data-theme="light"] .footer-links a#linkEerie:hover { color: var(--accent-h); }
+:root[data-theme="light"] .btn-accent:disabled { background: #dcdce4; color: #9a9aa6; }
+:root[data-theme="light"] .panel::-webkit-scrollbar-thumb,
+:root[data-theme="light"] .download-list::-webkit-scrollbar-thumb { background: #c6c6d0; }
+:root[data-theme="light"] .panel::-webkit-scrollbar-thumb:hover,
+:root[data-theme="light"] .download-list::-webkit-scrollbar-thumb:hover { background: #a9a9b7; }
+:root[data-theme="light"] .dl-status.cancelled { color: #6a6a76; }
+
 html, body { height: 100%; font-family: var(--font); background: var(--bg); color: var(--text); overflow: hidden; user-select: none; }
 
 #app { display: flex; flex-direction: column; height: 100vh; }
@@ -40,7 +69,8 @@ html, body { height: 100%; font-family: var(--font); background: var(--bg); colo
 .sidebar-bottom { margin-top: auto; padding: 8px; }
 
 /* Top bar (lang switcher) */
-.top-bar { display: flex; align-items: center; padding: 4px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; min-height: 30px; }
+.top-bar { display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; min-height: 30px; }
+.theme-toggle { padding: 4px 9px; font-size: 13px; line-height: 1; }
 .lang-switcher { display: flex; gap: 4px; }
 .lang-switcher button { background: transparent; border: 1.5px solid var(--border); padding: 2px 3px; border-radius: 4px; cursor: pointer; overflow: hidden; transition: all 0.12s; line-height: 0; }
 .lang-switcher button:hover { border-color: var(--text-dim); transform: translateY(-1px); }
@@ -161,6 +191,20 @@ select:focus { border-color: var(--accent); }
 
 .dl-item { display: flex; flex-direction: column; gap: 6px; padding: 12px 20px; border-bottom: 1px solid var(--border); transition: background 0.1s; cursor: default; }
 .dl-item:hover { background: var(--surface2); }
+
+/* Grid view: same markup, laid out as cards instead of full-width rows. */
+.view-toggle { display: inline-flex; align-items: center; gap: 6px; }
+.view-toggle svg { width: 13px; height: 13px; }
+.download-list.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; align-content: start; padding: 12px 20px; }
+.download-list.grid .dl-item { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 12px 14px; }
+.download-list.grid .dl-row-top { flex-wrap: wrap; row-gap: 6px; }
+.download-list.grid .dl-filename { flex: 1 1 100%; white-space: normal; overflow-wrap: anywhere; }
+.download-list.grid .dl-actions { margin-left: auto; }
+.download-list.grid .dl-row-bottom { flex-wrap: wrap; row-gap: 4px; }
+.download-list.grid .dl-url { flex: 1 1 100%; }
+/* The trim editor needs the full width, so a card holding one spans the whole grid. */
+.download-list.grid .dl-item:has(.dl-trim-editor) { grid-column: 1 / -1; }
+.download-list.grid .empty-state { grid-column: 1 / -1; }
 
 .dl-row-top { display: flex; align-items: center; gap: 10px; }
 .dl-filename { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }

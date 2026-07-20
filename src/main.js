@@ -435,6 +435,7 @@ function bindToggle(wrapId, checkId, key) {
   function paint() { check.classList.toggle('on', !!formState[key]); }
   paint();
   wrap.addEventListener('click', () => {
+    if (wrap.classList.contains('disabled')) return;
     formState[key] = !formState[key];
     paint();
     onFormChange();
@@ -471,6 +472,43 @@ function updateDebugVisibility() {
   if (settings.debug) renderDebug();
 }
 updateDebugVisibility();
+
+// ── Theme ──
+let currentTheme = localStorage.getItem('fr_theme') === 'light' ? 'light' : 'dark';
+
+function applyTheme(theme) {
+  currentTheme = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', currentTheme);
+  localStorage.setItem('fr_theme', currentTheme);
+  const btn = $('#themeToggle');
+  if (btn) {
+    // The icon shows the theme you would switch TO, same as NoteStash.
+    btn.textContent = currentTheme === 'dark' ? '☀' : '☾';
+    btn.title = currentTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+  }
+}
+applyTheme(currentTheme);
+$('#themeToggle').addEventListener('click', () => {
+  applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+});
+
+// ── Job list view mode ──
+let listView = localStorage.getItem('fr_listView') === 'grid' ? 'grid' : 'list';
+
+function applyListView(mode) {
+  listView = mode === 'grid' ? 'grid' : 'list';
+  jobList.classList.toggle('grid', listView === 'grid');
+  localStorage.setItem('fr_listView', listView);
+  const label = $('#viewToggleLabel');
+  const btn = $('#viewToggle');
+  // The label names the view you would switch TO.
+  if (label) label.textContent = listView === 'grid' ? 'List' : 'Grid';
+  if (btn) btn.title = listView === 'grid' ? 'Switch to list view' : 'Switch to grid view';
+}
+applyListView(listView);
+$('#viewToggle').addEventListener('click', () => {
+  applyListView(listView === 'grid' ? 'list' : 'grid');
+});
 
 // Presets
 // Video presets spell out targetSizeMb / verticalMode / metadata / noAudio too, even
@@ -724,6 +762,13 @@ function setGroupDisabled(input, disabled, _reasonKey) {
   if (hint) hint.remove();
 }
 
+// The checkbox-style toggles are plain divs, not form controls, so they need their own
+// disabled treatment. bindToggle ignores clicks while the wrapper carries this class.
+function setToggleDisabled(wrapId, disabled) {
+  const wrap = document.getElementById(wrapId);
+  if (wrap) wrap.classList.toggle('disabled', !!disabled);
+}
+
 function applyAudioDisabledState() {
   const off = !!formState.noAudio;
   const kind = formatKind(formatSelect.value);
@@ -779,6 +824,15 @@ function updateFormConflicts() {
 
   // Vertical mode: disabled by copy
   setGroupDisabled(verticalModeSelect, isCopy, isCopy ? 'disabled.byCopy' : null);
+
+  // Copy hands the video through untouched, so every encoder-side toggle is ignored:
+  // the backend writes "-c:v copy" and skips the whole encoder block. Deinterlace is
+  // worse than ignored - ffmpeg refuses to run a filter alongside a stream copy, so
+  // leaving it reachable lets the user build a job that cannot run.
+  setToggleDisabled('losslessToggleWrap', isCopy);
+  setToggleDisabled('iphoneToggleWrap', isCopy);
+  setToggleDisabled('hwToggleWrap', isCopy);
+  setToggleDisabled('deinterlaceToggleWrap', isCopy);
 }
 
 function formatKind(fmt) {
@@ -1088,6 +1142,11 @@ function estimatableJobs() {
   );
 }
 
+// How many files are measured at once. Each one can spawn several ffmpeg processes of
+// its own, so going wider than this makes every individual estimate slower and starves
+// any real conversion running alongside.
+const ESTIMATE_CONCURRENCY = 4;
+
 // One pass at a time. Sample encodes take far longer than the debounce, so without this
 // each settings change would stack another full set of ffmpeg processes on top of the
 // last, all but the newest destined to be thrown away.
@@ -1098,9 +1157,31 @@ async function runEstimates() {
     do {
       estimateRerun = false;
       const gen = ++estimateGeneration;
-      for (const job of estimatableJobs()) {
-        if (gen !== estimateGeneration || estimateRerun) break;
-        await estimateJob(job, gen);
+      const queue = estimatableJobs();
+
+      // Mark the whole batch up front so every row says "estimating..." straight away.
+      // Revealing them one at a time made it look like the app had stalled on one file.
+      for (const job of queue) {
+        job.estimating = true;
+        paintEstimate(job);
+      }
+
+      let next = 0;
+      const worker = async () => {
+        while (next < queue.length) {
+          if (gen !== estimateGeneration || estimateRerun) return;
+          const job = queue[next++];
+          await estimateJob(job, gen);
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(ESTIMATE_CONCURRENCY, queue.length) }, worker)
+      );
+
+      // Anything left marked from an abandoned pass has to be cleared, or its row keeps
+      // claiming to be working when nothing is.
+      for (const job of queue) {
+        if (job.estimating) clearEstimating(job);
       }
     } while (estimateRerun);
   } finally {
@@ -1161,8 +1242,11 @@ async function estimateJob(job, gen) {
     return;
   }
 
-  job.estimating = true;
-  paintEstimate(job);
+  // runEstimates already flagged the whole batch; this covers any other caller.
+  if (!job.estimating) {
+    job.estimating = true;
+    paintEstimate(job);
+  }
 
   try {
     const res = await invoke('estimate_output_size', {
@@ -1242,16 +1326,26 @@ function computeOutputPath(inputPath, outFormat, kind) {
     const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
     outName = `${base}_${ts}.${outFormat}`;
   } else {
-    // suffix
-    let suffix = outFormat;
+    // suffix: name the codec when we can, because that is the useful thing to know.
+    let codecSuffix = null;
     if (kind === 'video') {
       const vc = videoCodec.value;
-      if (vc === 'libx265') suffix = 'h265';
-      else if (vc === 'libx264') suffix = 'h264';
-      else if (vc === 'libvpx-vp9') suffix = 'vp9';
-      else if (vc === 'libaom-av1') suffix = 'av1';
+      if (vc === 'libx265') codecSuffix = 'h265';
+      else if (vc === 'libx264') codecSuffix = 'h264';
+      else if (vc === 'libvpx-vp9') codecSuffix = 'vp9';
+      else if (vc === 'libaom-av1') codecSuffix = 'av1';
     }
-    outName = `${base}_${suffix}.${outFormat}`;
+    if (codecSuffix) {
+      outName = `${base}_${codecSuffix}.${outFormat}`;
+    } else {
+      // Copy, Auto, and every audio or image job: there is no codec worth naming, so a
+      // suffix would only be noise ("clip_mov.mov"). The one thing it still buys is not
+      // landing on top of the source, which can only happen if the extension matches.
+      const inExt = (filename.split('.').pop() || '').toLowerCase();
+      outName = inExt === outFormat.toLowerCase()
+        ? `${base}_converted.${outFormat}`
+        : `${base}.${outFormat}`;
+    }
   }
   let out = joinPath(dir, outName);
 
