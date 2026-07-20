@@ -396,7 +396,7 @@ impl ConversionManager {
     }
 }
 
-fn build_ffmpeg_args(input: &str, output: &str, opt: &ConversionOptions) -> Vec<String> {
+pub(crate) fn build_ffmpeg_args(input: &str, output: &str, opt: &ConversionOptions) -> Vec<String> {
     let mut args: Vec<String> = Vec::new();
 
     args.push("-y".into());
@@ -781,6 +781,26 @@ fn swap_hw_encoder(software: &str, hw: Option<&str>) -> String {
         ("libx265", "amf") => "hevc_amf".into(),
         _ => software.to_string(),
     }
+}
+
+/// Whether these options will actually land on a GPU encoder. Size estimation needs
+/// to know, because hardware encoders hold a near-constant bitrate while CRF on a
+/// software encoder tracks the content, and the two need opposite sampling strategies.
+pub(crate) fn uses_hw_encoder(opt: &ConversionOptions) -> bool {
+    // Image and audio jobs return from build_ffmpeg_args before it ever resolves a video
+    // encoder, so asking which one they would use is meaningless. Without this guard an
+    // audio job falls through video_codec_for_container's libx264 default and claims to
+    // be GPU-encoded.
+    if opt.kind != "video" {
+        return false;
+    }
+    let vcodec = opt.video_codec.clone().unwrap_or_else(|| {
+        video_codec_for_container(&opt.container, opt.iphone_compatible).to_string()
+    });
+    if vcodec == "copy" {
+        return false;
+    }
+    is_hw_encoder(&swap_hw_encoder(&vcodec, opt.hw_accel.as_deref()))
 }
 
 fn is_hw_encoder(name: &str) -> bool {

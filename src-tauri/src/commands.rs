@@ -333,6 +333,240 @@ pub async fn generate_preview_video(
     })
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SizeEstimate {
+    pub bytes: u64,
+    /// How many seconds of source were actually encoded to produce this number.
+    pub sampled_seconds: f64,
+    /// True when the clip was short enough to encode whole, so `bytes` is the real size.
+    pub exact: bool,
+}
+
+/// "HH:MM:SS", "MM:SS" or plain seconds -> seconds. Rejects NaN and infinity, which
+/// f64's parser accepts from strings like "nan" and would otherwise poison every
+/// comparison downstream.
+fn parse_time_to_seconds(s: &str) -> Option<f64> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let parts: Vec<&str> = s.split(':').collect();
+    let secs = match parts.len() {
+        1 => parts[0].parse::<f64>().ok()?,
+        2 => parts[0].parse::<f64>().ok()? * 60.0 + parts[1].parse::<f64>().ok()?,
+        3 => {
+            parts[0].parse::<f64>().ok()? * 3600.0
+                + parts[1].parse::<f64>().ok()? * 60.0
+                + parts[2].parse::<f64>().ok()?
+        }
+        _ => return None,
+    };
+    if secs.is_finite() && secs >= 0.0 {
+        Some(secs)
+    } else {
+        None
+    }
+}
+
+/// The portion of the source that will actually be encoded, honouring any trim.
+/// `duration` must already be finite and positive.
+fn trimmed_range(opt: &ConversionOptions, duration: f64) -> (f64, f64) {
+    let start = opt
+        .trim_start
+        .as_deref()
+        .and_then(parse_time_to_seconds)
+        .unwrap_or(0.0)
+        .clamp(0.0, duration);
+    let end = opt
+        .trim_end
+        .as_deref()
+        .and_then(parse_time_to_seconds)
+        .unwrap_or(duration)
+        .clamp(0.0, duration);
+    if end <= start {
+        (0.0, duration)
+    } else {
+        (start, end)
+    }
+}
+
+/// Estimate the output size by encoding short samples with the caller's real settings
+/// and extrapolating. CRF and lossless have no fixed size relationship to the source,
+/// so measuring is the only honest way to predict them.
+#[tauri::command]
+pub async fn estimate_output_size(
+    input_path: String,
+    duration_seconds: f64,
+    options: ConversionOptions,
+) -> Result<SizeEstimate, String> {
+    use std::process::Stdio;
+    use tokio::process::Command;
+
+    if !duration_seconds.is_finite() || duration_seconds <= 0.0 {
+        return Err("source has no usable duration".into());
+    }
+
+    let (range_start, range_end) = trimmed_range(&options, duration_seconds);
+    let range_len = range_end - range_start;
+    if range_len <= 0.0 {
+        return Err("nothing left after trim".into());
+    }
+
+    let tmp_root = std::env::temp_dir().join("format-reaper").join("estimates");
+    std::fs::create_dir_all(&tmp_root).map_err(|e| e.to_string())?;
+
+    // Below this, encoding the whole thing costs about the same as sampling it
+    // and gives the real answer instead of an estimate.
+    const ENCODE_WHOLE_BELOW: f64 = 12.0;
+    const MIN_SAMPLED: f64 = 8.0;
+    const MAX_SAMPLED: f64 = 20.0;
+    // Each sample is an independent encode, so it opens with a forced keyframe that the
+    // real encode would only spend once every few hundred frames. Windows shorter than
+    // this let that one frame dominate the measurement.
+    const MIN_WINDOW: f64 = 1.5;
+    const MAX_WINDOWS: usize = 10;
+
+    // The two encoder families need opposite sampling.
+    //
+    // Software CRF spends bits according to how busy the picture is, and footage can
+    // swing about 2x within a single clip, so the samples have to be spread out to
+    // average it. Hardware encoders currently never receive the quality setting at all
+    // (build_ffmpeg_args emits -crf, which nvenc/qsv/amf ignore), so they hold a roughly
+    // constant bitrate and content barely matters - but each separate encode pays a
+    // rate-control ramp, which many short windows amplify. One long window suits them.
+    //
+    // If the hardware quality mapping is ever fixed (-cq / -global_quality), hardware
+    // output will start tracking content too and this branch should be revisited.
+    let hw = crate::converter::uses_hw_encoder(&options);
+
+    let exact = range_len <= ENCODE_WHOLE_BELOW;
+    let windows: Vec<(f64, f64)> = if exact {
+        vec![(range_start, range_len)]
+    } else if hw {
+        let w = (range_len * 0.25).clamp(MIN_SAMPLED, MAX_SAMPLED);
+        vec![(range_start + (range_len - w) / 2.0, w)]
+    } else {
+        let sampled = (range_len * 0.20).clamp(MIN_SAMPLED, MAX_SAMPLED);
+        // Spend the sampling budget on fewer, longer windows rather than let any
+        // window fall under MIN_WINDOW.
+        let count = ((sampled / MIN_WINDOW).floor() as usize).clamp(1, MAX_WINDOWS);
+        let w = sampled / count as f64;
+        (0..count)
+            .map(|i| {
+                let frac = (i as f64 + 0.5) / count as f64;
+                (range_start + (range_len - w) * frac, w)
+            })
+            .collect()
+    };
+
+    let ext = if options.container.is_empty() {
+        "mp4"
+    } else {
+        options.container.as_str()
+    };
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+
+    // A container that muxed no frames at all still weighs a few hundred bytes. Counting
+    // one of those as a full window of footage would drag the whole rate down, so anything
+    // this small is treated as "produced nothing" rather than as cheap footage.
+    const MIN_USEFUL_BYTES: u64 = 1024;
+
+    // Loop-invariant: the input path and its mtime cannot change while we sample.
+    let path_key = hash_path_key(&input_path);
+
+    // Let build_ffmpeg_args produce the real command, then swap its accurate-seek trim
+    // for a fast seek. Accurate seek decodes from frame zero, which would take minutes
+    // to reach the middle of a long file.
+    let mut sample_opt = options.clone();
+    sample_opt.trim_start = None;
+    sample_opt.trim_end = None;
+
+    let mut total_bytes: u64 = 0;
+    let mut total_secs: f64 = 0.0;
+    let mut last_error: Option<String> = None;
+
+    for (i, (start, len)) in windows.iter().enumerate() {
+        let out_path = tmp_root.join(format!("{}-{}-{}.{}", path_key, stamp, i, ext));
+
+        let mut args = crate::converter::build_ffmpeg_args(
+            &input_path,
+            out_path.to_string_lossy().as_ref(),
+            &sample_opt,
+        );
+        // Progress reporting exists for the live conversion's parser; nothing reads it here.
+        if let Some(p) = args.iter().position(|a| a == "-progress") {
+            args.drain(p..=p + 1);
+        }
+        args.retain(|a| a != "-nostats");
+
+        let i_idx = args
+            .iter()
+            .position(|a| a == "-i")
+            .ok_or_else(|| "malformed ffmpeg args".to_string())?;
+        args.insert(i_idx, format!("{:.3}", start));
+        args.insert(i_idx, "-ss".into());
+        // "-ss" <start> "-i" <input> now occupy i_idx through i_idx+3, so the duration
+        // cap goes immediately after the input path, at i_idx+4.
+        args.insert(i_idx + 4, format!("{:.3}", len));
+        args.insert(i_idx + 4, "-t".into());
+
+        let mut cmd = Command::new("ffmpeg");
+        cmd.args(&args);
+        cmd.stdin(Stdio::null());
+        cmd.stderr(Stdio::piped());
+        cmd.kill_on_drop(true);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000);
+
+        let output = cmd
+            .output()
+            .await
+            .map_err(|e| format!("spawn ffmpeg: {}", e))?;
+
+        if output.status.success() {
+            if let Ok(meta) = std::fs::metadata(&out_path) {
+                if meta.len() >= MIN_USEFUL_BYTES {
+                    total_bytes += meta.len();
+                    total_secs += len;
+                }
+            }
+        } else {
+            // One bad window (a corrupt GOP, a window past a truncated stream) should not
+            // throw away the windows that did work. Only give up if none of them did.
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            last_error = Some(
+                stderr
+                    .lines()
+                    .rev()
+                    .find(|l| !l.trim().is_empty())
+                    .unwrap_or("unknown error")
+                    .to_string(),
+            );
+        }
+        let _ = std::fs::remove_file(&out_path);
+    }
+
+    if total_secs <= 0.0 || total_bytes == 0 {
+        return Err(match last_error {
+            Some(e) => format!("sample encode failed: {}", e),
+            None => "sample encode produced nothing".into(),
+        });
+    }
+
+    // When the whole range was encoded, total_secs == range_len and this is the real size.
+    let bytes = ((total_bytes as f64 / total_secs) * range_len).round() as u64;
+
+    Ok(SizeEstimate {
+        bytes,
+        sampled_seconds: total_secs,
+        exact,
+    })
+}
+
 async fn has_encoder(name: &str) -> bool {
     use std::process::Stdio;
     use tokio::process::Command;

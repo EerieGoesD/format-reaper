@@ -59,6 +59,11 @@ const I18N = {
     'disabled.byCopy': 'overridden by video codec: copy',
     'disabled.byVertical': 'overridden by Vertical 9:16',
     'disabled.byNoAudio': 'overridden by No audio',
+    'est.working': 'estimating...',
+    'est.total': '≈ {size} total',
+    'est.tipSampled': 'Estimated output size.\n\nMeasured by actually encoding {secs}s of this clip with your current settings. On clips of a couple of minutes it usually lands within about 10%. Longer clips are judged on a smaller slice of the whole, so expect it to drift further.',
+    'est.tipExact': 'Output size, measured by encoding the whole clip with your current settings.',
+    'est.tipMath': 'Estimated output size, calculated from your bitrate and the clip length.',
   },
   pt: {
     'nav.convert': 'Converter', 'nav.history': 'Histórico', 'nav.settings': 'Definições', 'nav.debug': 'Depuração',
@@ -113,6 +118,11 @@ const I18N = {
     'disabled.byCopy': 'ignorado pelo codec de vídeo: copy',
     'disabled.byVertical': 'ignorado por Vertical 9:16',
     'disabled.byNoAudio': 'ignorado por Sem áudio',
+    'est.working': 'a estimar...',
+    'est.total': '≈ {size} no total',
+    'est.tipSampled': 'Tamanho estimado do ficheiro final.\n\nMedido codificando mesmo {secs}s deste clip com as tuas definições atuais. Em clips de poucos minutos costuma ficar a cerca de 10% do real. Clips longos são avaliados a partir de uma fatia menor do total, por isso conta com mais desvio.',
+    'est.tipExact': 'Tamanho do ficheiro final, medido codificando o clip inteiro com as tuas definições atuais.',
+    'est.tipMath': 'Tamanho estimado, calculado a partir da taxa de bits e da duração do clip.',
   }
 };
 
@@ -463,15 +473,18 @@ function updateDebugVisibility() {
 updateDebugVisibility();
 
 // Presets
+// Video presets spell out targetSizeMb / verticalMode / metadata / noAudio too, even
+// though they are all "off". Applying a preset should reset the whole video pipeline,
+// and the modified marker can only notice a field the preset actually claims.
 const BUILTIN_PRESETS = {
-  'iPhone 4K HEVC':       { format: 'mp4',  videoCodec: 'libx265', crf: 20, vbitrate: 0, preset: 'medium', resolution: 'keep',  fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: true,  lossless: false, hw: true,  deinterlace: false },
-  'iPhone 1080p':         { format: 'mp4',  videoCodec: 'libx265', crf: 22, vbitrate: 0, preset: 'medium', resolution: '1080p', fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: true,  lossless: false, hw: true,  deinterlace: false },
-  'Instagram (iPhone)':   { format: 'mp4',  videoCodec: 'libx264', crf: 21, vbitrate: 0, preset: 'medium', resolution: '1080p', fps: 30, audioCodec: 'aac',     abitrate: 128, iphone: true,  lossless: false, hw: true,  deinterlace: true  },
-  'MP4 H.264':            { format: 'mp4',  videoCodec: 'libx264', crf: 20, vbitrate: 0, preset: 'medium', resolution: 'keep',  fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: false, lossless: false, hw: true,  deinterlace: false },
-  'WebM VP9':             { format: 'webm', videoCodec: 'libvpx-vp9', crf: 30, vbitrate: 0, preset: 'medium', resolution: 'keep', fps: 0, audioCodec: 'libopus', abitrate: 128, iphone: false, lossless: false, hw: false, deinterlace: false },
+  'iPhone 4K HEVC':       { format: 'mp4',  videoCodec: 'libx265', crf: 20, vbitrate: 0, preset: 'medium', resolution: 'keep',  fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: true,  lossless: false, hw: true,  deinterlace: false, targetSizeMb: 0, verticalMode: 'off', metadata: false, noAudio: false },
+  'iPhone 1080p':         { format: 'mp4',  videoCodec: 'libx265', crf: 22, vbitrate: 0, preset: 'medium', resolution: '1080p', fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: true,  lossless: false, hw: true,  deinterlace: false, targetSizeMb: 0, verticalMode: 'off', metadata: false, noAudio: false },
+  'Instagram (iPhone)':   { format: 'mp4',  videoCodec: 'libx264', crf: 21, vbitrate: 0, preset: 'medium', resolution: '1080p', fps: 30, audioCodec: 'aac',     abitrate: 128, iphone: true,  lossless: false, hw: true,  deinterlace: true,  targetSizeMb: 0, verticalMode: 'off', metadata: false, noAudio: false },
+  'MP4 H.264':            { format: 'mp4',  videoCodec: 'libx264', crf: 20, vbitrate: 0, preset: 'medium', resolution: 'keep',  fps: 0,  audioCodec: 'aac',     abitrate: 192, iphone: false, lossless: false, hw: true,  deinterlace: false, targetSizeMb: 0, verticalMode: 'off', metadata: false, noAudio: false },
+  'WebM VP9':             { format: 'webm', videoCodec: 'libvpx-vp9', crf: 30, vbitrate: 0, preset: 'medium', resolution: 'keep', fps: 0, audioCodec: 'libopus', abitrate: 128, iphone: false, lossless: false, hw: false, deinterlace: false, targetSizeMb: 0, verticalMode: 'off', metadata: false, noAudio: false },
   'Audio MP3 320k':       { format: 'mp3',  audioOnlyCodec: 'libmp3lame', audioOnlyBitrate: 320 },
-  'Lossless MKV':         { format: 'mkv',  videoCodec: 'libx265', preset: 'medium', resolution: 'keep', fps: 0, audioCodec: 'copy', iphone: false, lossless: true, hw: false, deinterlace: false },
-  'Camcorder MTS clean':  { format: 'mp4',  videoCodec: 'libx265', crf: 20, vbitrate: 0, preset: 'medium', resolution: 'keep',  fps: 0,  audioCodec: 'aac',     abitrate: 256, iphone: true,  lossless: false, hw: true,  deinterlace: true  },
+  'Lossless MKV':         { format: 'mkv',  videoCodec: 'libx265', preset: 'medium', resolution: 'keep', fps: 0, audioCodec: 'copy', iphone: false, lossless: true, hw: false, deinterlace: false, targetSizeMb: 0, verticalMode: 'off', metadata: false, noAudio: false },
+  'Camcorder MTS clean':  { format: 'mp4',  videoCodec: 'libx265', crf: 20, vbitrate: 0, preset: 'medium', resolution: 'keep',  fps: 0,  audioCodec: 'aac',     abitrate: 256, iphone: true,  lossless: false, hw: true,  deinterlace: true,  targetSizeMb: 0, verticalMode: 'off', metadata: false, noAudio: false },
   'Custom (no preset)':   { __noop: true },
 };
 
@@ -593,6 +606,47 @@ function updateDeleteBtn() {
   $('#deletePresetBtn').style.display = v.startsWith('custom:') ? '' : 'none';
 }
 
+const CUSTOM_PRESET_KEY = 'builtin:Custom (no preset)';
+
+function presetDataForKey(key) {
+  if (!key) return null;
+  if (key.startsWith('builtin:')) return BUILTIN_PRESETS[key.slice('builtin:'.length)] || null;
+  if (key.startsWith('custom:')) return loadCustomPresets()[key.slice('custom:'.length)] || null;
+  return null;
+}
+
+// Presets only define the keys they care about, so compare those and ignore the rest.
+// Both sides come from snapshotForm's fixed shape, so a string compare is enough.
+function presetMatchesForm(data) {
+  if (!data || data.__noop) return true;
+  const snap = snapshotForm();
+  for (const [k, v] of Object.entries(data)) {
+    if (k === '__noop' || !(k in snap)) continue;
+    if (String(snap[k]) !== String(v)) return false;
+  }
+  return true;
+}
+
+// The dropdown is the thing you trust to tell you what is about to run. The moment the
+// form stops matching the preset it is showing, it drops to Custom rather than keep
+// claiming a name that is no longer true.
+function syncPresetSelection() {
+  const dd = $('#presetDropdown');
+  if (!dd) return;
+  const key = dd.value || '';
+  if (key === CUSTOM_PRESET_KEY) return;
+  const data = presetDataForKey(key);
+  if (!data || data.__noop || presetMatchesForm(data)) return;
+  dd.value = CUSTOM_PRESET_KEY;
+  // Deliberately NOT written to localStorage. The individual form fields are not
+  // persisted - on launch the form is rebuilt by re-applying the saved preset - so
+  // saving "Custom" here would leave nothing to restore and the next launch would come
+  // up on the bare defaults instead of the preset the user last chose on purpose.
+  settings.preset = CUSTOM_PRESET_KEY;
+  updateDeleteBtn();
+  dlog('event', 'Settings no longer match the preset - switched to Custom');
+}
+
 $('#presetDropdown').addEventListener('change', () => {
   const v = $('#presetDropdown').value;
   settings.preset = v;
@@ -681,6 +735,11 @@ function applyAudioDisabledState() {
 
 function updateFormConflicts() {
   applyAudioDisabledState();
+
+  // These two apply to every output kind, so they run before the video-only guard below.
+  syncPresetSelection();
+  scheduleEstimates();
+
   const kind = formatKind(formatSelect.value);
   if (kind !== 'video') return;
 
@@ -738,19 +797,24 @@ function onFormChange() {
   audioOptionsRow.style.display = kind === 'audio' ? 'flex' : 'none';
   updateFormConflicts();
 }
-formatSelect.addEventListener('change', () => { onFormChange(); });
-videoCodec.addEventListener('change', onFormChange);
+// The two fields that persist themselves. Everything else is handled by the delegated
+// listener below, so nothing here calls updateFormConflicts twice for one edit.
 targetSizeMbInput.addEventListener('change', () => {
-  const v = parseInt(targetSizeMbInput.value, 10) || 0;
-  localStorage.setItem('fr_targetSizeMb', String(v));
-  updateFormConflicts();
+  localStorage.setItem('fr_targetSizeMb', String(parseInt(targetSizeMbInput.value, 10) || 0));
 });
 verticalModeSelect.addEventListener('change', () => {
   localStorage.setItem('fr_verticalMode', verticalModeSelect.value);
-  updateFormConflicts();
 });
-vbitrateInput.addEventListener('change', updateFormConflicts);
-crfInput.addEventListener('change', updateFormConflicts);
+
+// One delegated listener for the whole form. Output Folder is excluded: it sits inside
+// .convert-form but cannot change the output size, and estimating is expensive.
+const NON_ENCODING_FIELDS = new Set(['outputDir']);
+$('.convert-form').addEventListener('change', (e) => {
+  if (e.target && NON_ENCODING_FIELDS.has(e.target.id)) return;
+  // Format changes also swap which option rows are visible.
+  if (e.target === formatSelect) onFormChange();
+  else updateFormConflicts();
+});
 // Restore last-used values
 targetSizeMbInput.value = String(parseInt(localStorage.getItem('fr_targetSizeMb') || '0', 10));
 verticalModeSelect.value = localStorage.getItem('fr_verticalMode') || 'off';
@@ -885,8 +949,12 @@ async function addFileToQueue(filePath) {
   };
   jobs.push(job);
   renderJobs();
+  scheduleEstimates();
   dlog('event', `Added to queue: ${filename}`);
 }
+
+// What fit-to-size reserves for audio when the bitrate field is left blank.
+const FIT_DEFAULT_AUDIO_KBPS = 192;
 
 function buildOptions(kind, job) {
   const fmt = formatSelect.value;
@@ -945,12 +1013,17 @@ function buildOptions(kind, job) {
         1,
         computeTrimmedDuration(job.duration, job.trimStart, job.trimEnd)
       );
-      const audioKbps = opt.noAudio ? 0 : (opt.audioBitrateKbps || 192);
-      const totalKbpsBudget = (targetMB * 8 * 1024 * 0.95) / effectiveDur;
+      const audioKbps = opt.noAudio ? 0 : (opt.audioBitrateKbps || FIT_DEFAULT_AUDIO_KBPS);
+      // ffmpeg reads a "k" bitrate suffix as 1000 bits, so the budget has to be in the
+      // same units. Deriving it with 1024 made every fit-to-size job undershoot by a
+      // further 2.4% on top of the intended 5% margin.
+      const totalKbpsBudget = (targetMB * 1048576 * 8 * 0.95) / 1000 / effectiveDur;
       const videoKbps = Math.max(50, Math.floor(totalKbpsBudget - audioKbps));
       opt.videoBitrateKbps = videoKbps;
       opt.crf = null;
-      dlog('info', `Fit-to-size ${targetMB}MB over ${effectiveDur.toFixed(1)}s -> video ${videoKbps} kbps + audio ${audioKbps} kbps`);
+      // Pin the audio to what we actually reserved, so the encoder cannot spend a
+      // different amount than the budget assumed.
+      if (!opt.noAudio) opt.audioBitrateKbps = audioKbps;
     }
   } else if (kind === 'audio') {
     if (audioOnlyCodec.value !== 'auto') opt.audioCodec = audioOnlyCodec.value;
@@ -961,6 +1034,197 @@ function buildOptions(kind, job) {
     opt.resolution = imageResolutionSelect.value || 'keep';
   }
   return opt;
+}
+
+// ── Output size estimates ──
+// CRF and lossless have no fixed relationship to source size, so for those we encode
+// a few short windows with the user's real settings and scale up. Everything else is
+// arithmetic and answered instantly.
+const ESTIMATE_DEBOUNCE_MS = 700;
+const ESTIMATE_CACHE_MAX = 200;
+const estimateCache = new Map();
+let estimateTimer = null;
+let estimateGeneration = 0;
+let estimateRunning = false;
+let estimateRerun = false;
+
+// What the backend picks when Audio Codec is left on Auto. Mirrors
+// audio_codec_for_container in converter.rs. Only used to decide whether the size
+// follows from the bitrate, so an unknown container falls through to sampling, which
+// is always correct - just slower.
+const CONTAINER_AUDIO_DEFAULT = {
+  mp4: 'aac', mov: 'aac', mkv: 'aac', m4a: 'aac',
+  webm: 'libopus', avi: 'libmp3lame', mp3: 'libmp3lame',
+  ogg: 'libvorbis', wav: 'pcm_s16le', flac: 'flac', opus: 'libopus',
+};
+// Codecs that ignore -b:a entirely, so bitrate arithmetic would be meaningless.
+const FIXED_RATE_AUDIO = ['flac', 'pcm_s16le', 'copy'];
+
+function scheduleEstimates() {
+  clearTimeout(estimateTimer);
+  estimateTimer = setTimeout(() => {
+    runEstimates().catch(e => dlog('warn', `Estimate pass failed: ${e}`));
+  }, ESTIMATE_DEBOUNCE_MS);
+}
+
+function cacheEstimate(key, val) {
+  // Plain insertion-order LRU: Map keeps insertion order, so the first key is the oldest.
+  if (estimateCache.size >= ESTIMATE_CACHE_MAX) {
+    estimateCache.delete(estimateCache.keys().next().value);
+  }
+  estimateCache.set(key, val);
+}
+
+// Only jobs the convert path would actually accept. Mirrors the cross-kind rule in
+// convertAll, so we never burn a sample encode on a combination the app refuses.
+function estimatableJobs() {
+  const targetKind = formatKind(formatSelect.value);
+  if (targetKind === 'image') return [];
+  return jobs.filter(j =>
+    j.kind !== 'image' &&
+    j.duration > 0 &&
+    (targetKind === j.kind || (j.kind === 'video' && targetKind === 'audio')) &&
+    (j.status === 'Pending' || j.status === 'Failed' || j.status === 'Cancelled')
+  );
+}
+
+// One pass at a time. Sample encodes take far longer than the debounce, so without this
+// each settings change would stack another full set of ffmpeg processes on top of the
+// last, all but the newest destined to be thrown away.
+async function runEstimates() {
+  if (estimateRunning) { estimateRerun = true; return; }
+  estimateRunning = true;
+  try {
+    do {
+      estimateRerun = false;
+      const gen = ++estimateGeneration;
+      for (const job of estimatableJobs()) {
+        if (gen !== estimateGeneration || estimateRerun) break;
+        await estimateJob(job, gen);
+      }
+    } while (estimateRerun);
+  } finally {
+    estimateRunning = false;
+  }
+}
+
+function stopEstimates() {
+  clearTimeout(estimateTimer);
+  estimateGeneration++;
+  estimateRerun = false;
+}
+
+// Cases where the size follows directly from the settings, no encoding needed.
+function arithmeticEstimate(job, opt) {
+  const dur = computeTrimmedDuration(job.duration, job.trimStart, job.trimEnd);
+  if (!(dur > 0)) return null;
+
+  const audioKbps = opt.noAudio ? 0 : (opt.audioBitrateKbps || 0);
+  const audioCodec = opt.audioCodec || CONTAINER_AUDIO_DEFAULT[opt.container] || null;
+
+  // Both streams passed through untouched, so the output tracks the input size.
+  // "No audio" deliberately does not qualify: it drops a track whose size we do not
+  // know, so that case falls through to a real measurement.
+  if (opt.videoCodec === 'copy' && opt.audioCodec === 'copy') {
+    const ratio = job.duration > 0 ? dur / job.duration : 1;
+    return { bytes: Math.round(job.inputSize * ratio), kind: 'math' };
+  }
+  if (!opt.lossless && opt.videoBitrateKbps > 0) {
+    return { bytes: Math.round(((opt.videoBitrateKbps + audioKbps) * 1000 * dur) / 8), kind: 'math' };
+  }
+  // opt.kind, not job.kind: a video file being converted to audio runs the audio path.
+  if (opt.kind === 'audio' && audioKbps > 0 && audioCodec && !FIXED_RATE_AUDIO.includes(audioCodec)) {
+    return { bytes: Math.round((audioKbps * 1000 * dur) / 8), kind: 'math' };
+  }
+  return null;
+}
+
+async function estimateJob(job, gen) {
+  let opt;
+  try {
+    // The conversion is built from the OUTPUT format's kind, not the source file's,
+    // so the estimate has to model the same thing or it measures a different command.
+    opt = buildOptions(formatKind(formatSelect.value), job);
+  } catch (e) {
+    dlog('warn', `Estimate skipped for ${job.filename}: ${e}`);
+    return;
+  }
+  const key = job.inputPath + '|' + JSON.stringify(opt);
+
+  const cached = estimateCache.get(key);
+  if (cached) { applyEstimate(job, cached); return; }
+
+  const math = arithmeticEstimate(job, opt);
+  if (math) {
+    cacheEstimate(key, math);
+    applyEstimate(job, math);
+    return;
+  }
+
+  job.estimating = true;
+  paintEstimate(job);
+
+  try {
+    const res = await invoke('estimate_output_size', {
+      inputPath: job.inputPath,
+      durationSeconds: job.duration,
+      options: opt,
+    });
+    if (gen !== estimateGeneration) { clearEstimating(job); return; }
+    const val = {
+      bytes: res.bytes,
+      kind: res.exact ? 'exact' : 'sampled',
+      sampledSeconds: res.sampledSeconds || 0,
+    };
+    cacheEstimate(key, val);
+    applyEstimate(job, val);
+  } catch (e) {
+    dlog('warn', `Estimate failed for ${job.filename}: ${e}`);
+    if (gen !== estimateGeneration) { clearEstimating(job); return; }
+    job.estimateBytes = 0;
+    clearEstimating(job);
+  }
+}
+
+// Always clear the in-progress flag, including on the abandoned-pass paths. A job that
+// leaves the pending list mid-estimate is never revisited, so a leaked flag would pin
+// its row to "estimating..." for good.
+function clearEstimating(job) {
+  job.estimating = false;
+  paintEstimate(job);
+}
+
+function applyEstimate(job, val) {
+  job.estimating = false;
+  job.estimateBytes = val.bytes;
+  job.estimateKind = val.kind;
+  job.estimateSampledSeconds = val.sampledSeconds || 0;
+  paintEstimate(job);
+}
+
+function estimateTooltip(job) {
+  if (job.estimateKind === 'exact') return t('est.tipExact');
+  if (job.estimateKind === 'math') return t('est.tipMath');
+  return t('est.tipSampled', { secs: Math.round(job.estimateSampledSeconds || 0) });
+}
+
+// The size cell, rendered on its own so an arriving estimate can repaint just this
+// span instead of the whole row (which would tear down an open trim editor).
+function sizeCellHTML(job) {
+  const base = fmtBytes(job.inputSize);
+  if (job.outputSize) return `${base} &rarr; ${fmtBytes(job.outputSize)}`;
+  if (job.estimating) return `${base} <span class="dl-est working">${escapeHtml(t('est.working'))}</span>`;
+  if (job.estimateBytes > 0) {
+    const approx = job.estimateKind === 'exact' ? '' : '~';
+    return `${base} &rarr; <span class="dl-est" title="${escapeHtml(estimateTooltip(job))}">${approx}${fmtBytes(job.estimateBytes)}</span>`;
+  }
+  return base;
+}
+
+function paintEstimate(job) {
+  const el = jobList.querySelector(`.dl-item[data-id="${job.id}"] .dl-size`);
+  if (el) el.innerHTML = sizeCellHTML(job);
+  updateFooter();
 }
 
 function computeOutputPath(inputPath, outFormat, kind) {
@@ -1020,6 +1284,9 @@ convertAllBtn.addEventListener('click', async () => {
     );
     return;
   }
+
+  // Real conversions get the CPU from here on; a queued estimate pass must not compete.
+  stopEstimates();
 
   const pending = jobs.filter(j => j.status === 'Pending' || j.status === 'Failed' || j.status === 'Cancelled');
   for (const job of pending) {
@@ -1160,7 +1427,7 @@ function renderJobHTML(job) {
   return `
     <div class="dl-row-top">
       <span class="dl-filename" title="${escapeHtml(job.inputPath)}">${escapeHtml(job.filename)}</span>
-      <span class="dl-size">${fmtBytes(job.inputSize)}${job.outputSize ? ' → ' + fmtBytes(job.outputSize) : ''}</span>
+      <span class="dl-size">${sizeCellHTML(job)}</span>
       ${speedEta}
       ${statusBadge}
       <div class="dl-actions">${trimBlock}${revealBtn}${actions}</div>
@@ -1643,13 +1910,16 @@ async function handleAction(job, action, value) {
     renderJobs();
   } else if (action === 'trim-start') {
     job.trimStart = (value || '').trim();
+    scheduleEstimates();
   } else if (action === 'trim-end') {
     job.trimEnd = (value || '').trim();
+    scheduleEstimates();
   } else if (action === 'trim-clear') {
     job.trimStart = '';
     job.trimEnd = '';
     job.trimExpanded = false;
     renderJobs();
+    scheduleEstimates();
   }
 }
 
@@ -1665,7 +1935,13 @@ function updateFooter() {
     const saved = totalIn - totalOut;
     footerSaved.textContent = t(saved >= 0 ? 'footer.saved' : 'footer.added', { size: fmtBytes(Math.abs(saved)) });
   } else {
-    footerSaved.textContent = '';
+    // Nothing converted yet, so show what the queue is predicted to weigh instead.
+    // Only jobs still waiting to run - a failed or cancelled job produces nothing.
+    const estTotal = jobs.reduce(
+      (a, j) => a + (j.status === 'Pending' ? (j.estimateBytes || 0) : 0),
+      0
+    );
+    footerSaved.textContent = estTotal > 0 ? t('est.total', { size: fmtBytes(estTotal) }) : '';
   }
 
   const totalActive = running + queued;
@@ -2108,6 +2384,13 @@ async function init() {
   }
   applyPresetByKey(settings.preset);
 
+  // Applying a preset resets the whole video pipeline, including Fit to size and
+  // Vertical. Those two persist independently, so put the saved values back afterwards
+  // or every launch would silently discard them. onFormChange below then drops the
+  // dropdown to Custom if they no longer match the preset.
+  targetSizeMbInput.value = String(parseInt(localStorage.getItem('fr_targetSizeMb') || '0', 10));
+  verticalModeSelect.value = localStorage.getItem('fr_verticalMode') || 'off';
+
   refreshToggles();
   onFormChange();
   setupDragDrop();
@@ -2274,6 +2557,9 @@ async function pollWatchFolders() {
     }
     targetSizeMbInput.value = savedTarget;
     verticalModeSelect.value = savedVertical;
+    // Assigning .value fires no change event, so the conflict states and the preset
+    // selection would still reflect the preset's zeroed values without this.
+    updateFormConflicts();
     // Auto-start the queued items
     try { document.getElementById('convertAllBtn').click(); } catch {}
   }
