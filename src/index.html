@@ -21,6 +21,7 @@
           </svg>
         </div>
         <span>Format Reaper</span>
+        <button class="btn btn-ghost theme-toggle" id="themeToggle" title="Switch to light theme">&#9728;</button>
       </div>
       <div class="nav-item active" data-panel="convert">
         <svg viewBox="0 0 16 16"><path d="M3 8h7M7 5l3 3-3 3M13 3v10"/></svg>
@@ -44,8 +45,8 @@
     <div class="panels">
 
       <div class="top-bar">
+        <button class="btn btn-ghost icon-only" id="sidebarToggle" title="Hide sidebar">&#9776;</button>
         <div class="spacer"></div>
-        <button class="btn btn-ghost theme-toggle" id="themeToggle" title="Switch to light theme">&#9728;</button>
         <div class="lang-switcher" id="langSwitcher">
           <button data-lang="en" title="English" aria-label="English">
             <svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg">
@@ -74,10 +75,6 @@
           <button class="btn btn-ghost" id="addFolderBtn" title="Add all media files from a folder" data-i18n="btn.addFolder">Add Folder</button>
           <div class="add-bar-hint" data-i18n="hint.dropFiles">or drop files anywhere in the window</div>
           <div class="spacer"></div>
-          <button class="btn btn-ghost btn-sm view-toggle" id="viewToggle" title="Switch to grid view">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="2" y="2.5" width="5" height="5" rx="1"/><rect x="9" y="2.5" width="5" height="5" rx="1"/><rect x="2" y="9.5" width="5" height="5" rx="1"/><rect x="9" y="9.5" width="5" height="5" rx="1"/></svg>
-            <span id="viewToggleLabel">Grid</span>
-          </button>
           <span class="ffmpeg-status" id="ffmpegStatus"></span>
           <button class="btn-icon ffmpeg-refresh" id="ffmpegRefreshBtn" title="Re-check FFmpeg installation">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2v3h-3"/></svg>
@@ -312,8 +309,13 @@ Output always 1080x1920.">?</span>
           <button class="btn btn-accent" id="convertAllBtn" data-i18n="btn.convertAll">Convert All</button>
           <button class="btn btn-ghost btn-sm" id="cancelAllBtn" data-i18n="btn.cancelAll">Cancel All</button>
           <button class="btn btn-ghost btn-sm" id="clearCompletedBtn" data-i18n="btn.clearCompleted">Clear Completed</button>
+          <button class="btn btn-ghost btn-sm" id="removeAllBtn" data-i18n="btn.removeAll">Remove All</button>
           <div class="spacer"></div>
           <span class="status-text" id="globalStatus"></span>
+          <button class="btn btn-ghost btn-sm view-toggle" id="viewToggle" title="Switch to grid view">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="2" y="2.5" width="5" height="5" rx="1"/><rect x="9" y="2.5" width="5" height="5" rx="1"/><rect x="2" y="9.5" width="5" height="5" rx="1"/><rect x="9" y="9.5" width="5" height="5" rx="1"/></svg>
+            <span id="viewToggleLabel">Grid</span>
+          </button>
         </div>
 
         <div class="overall-progress" id="overallProgress" style="display:none;">
@@ -484,8 +486,7 @@ Output always 1080x1920.">?</span>
 
   <div class="global-footer">
     <div class="footer-stats">
-      <span id="footerActive">0 active</span>
-      <span id="footerCompleted">0 completed</span>
+      <span class="footer-version" id="footerVersion"></span>
       <span id="footerSaved"></span>
     </div>
     <div class="footer-links">

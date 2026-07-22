@@ -170,10 +170,17 @@ pub struct Thumbnail {
 pub async fn extract_single_frame(
     input_path: String,
     time_seconds: f64,
+    #[allow(unused_variables)] width: Option<u32>,
 ) -> Result<String, String> {
     use base64::{engine::general_purpose, Engine as _};
     use std::process::Stdio;
     use tokio::process::Command;
+
+    // Default 160px suits the trim strip, where latency matters more than sharpness.
+    // Grid posters ask for more because they are displayed several times that size.
+    let w = width.unwrap_or(160).clamp(64, 1280);
+    let seek = format!("{:.3}", time_seconds.max(0.0));
+    let scale = format!("scale={}:-2:flags=fast_bilinear", w);
 
     let mut cmd = Command::new("ffmpeg");
     cmd.args([
@@ -186,18 +193,15 @@ pub async fn extract_single_frame(
         "auto",
         // Fast seek BEFORE -i (container-level keyframe seek, ~10x faster than accurate seek)
         "-ss",
-        &format!("{:.3}", time_seconds.max(0.0)),
+        &seek,
         "-i",
         &input_path,
         "-frames:v",
         "1",
-        // Smaller preview = faster encode + smaller IPC payload.
-        // 160px wide @ 16:9 = 160x90, scaled up in CSS. The MP4 preview takes over
-        // once it is ready so we optimise this path purely for latency.
         "-vf",
-        "scale=160:-2:flags=fast_bilinear",
+        &scale,
         "-q:v",
-        "8",
+        "6",
         "-f",
         "image2pipe",
         "-vcodec",
@@ -580,6 +584,13 @@ async fn has_encoder(name: &str) -> bool {
         return String::from_utf8_lossy(&out.stdout).contains(name);
     }
     false
+}
+
+/// The shipped build number, so the footer can show what the user is actually running.
+/// Comes from Cargo.toml, which is kept in step with tauri.conf.json's version.
+#[tauri::command]
+pub fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 #[tauri::command]

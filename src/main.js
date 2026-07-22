@@ -9,7 +9,7 @@ const I18N = {
   en: {
     'nav.convert': 'Convert', 'nav.history': 'History', 'nav.settings': 'Settings', 'nav.debug': 'Debug',
     'btn.addFiles': 'Add Files', 'btn.addFolder': 'Add Folder',
-    'btn.convertAll': 'Convert All', 'btn.cancelAll': 'Cancel All', 'btn.clearCompleted': 'Clear Completed',
+    'btn.convertAll': 'Convert All', 'btn.cancelAll': 'Cancel All', 'btn.clearCompleted': 'Clear Completed', 'btn.removeAll': 'Remove All',
     'btn.reset': 'Reset', 'btn.browse': 'Browse', 'btn.recheck': 'Re-check', 'btn.download': 'Download',
     'btn.save': 'Save', 'btn.cancel': 'Cancel', 'btn.close': 'Close',
     'btn.play': '▶ Play', 'btn.pause': '⏸ Pause', 'btn.playRange': 'Play IN to OUT',
@@ -68,7 +68,7 @@ const I18N = {
   pt: {
     'nav.convert': 'Converter', 'nav.history': 'Histórico', 'nav.settings': 'Definições', 'nav.debug': 'Depuração',
     'btn.addFiles': 'Adicionar ficheiros', 'btn.addFolder': 'Adicionar pasta',
-    'btn.convertAll': 'Converter tudo', 'btn.cancelAll': 'Cancelar tudo', 'btn.clearCompleted': 'Limpar concluídos',
+    'btn.convertAll': 'Converter tudo', 'btn.cancelAll': 'Cancelar tudo', 'btn.clearCompleted': 'Limpar concluídos', 'btn.removeAll': 'Remover tudo',
     'btn.reset': 'Repor', 'btn.browse': 'Procurar', 'btn.recheck': 'Verificar novamente', 'btn.download': 'Transferir',
     'btn.save': 'Guardar', 'btn.cancel': 'Cancelar', 'btn.close': 'Fechar',
     'btn.play': '▶ Reproduzir', 'btn.pause': '⏸ Pausa', 'btn.playRange': 'Reproduzir IN a OUT',
@@ -250,8 +250,6 @@ const overallText = $('#overallText');
 const overallPct = $('#overallPct');
 const overallBar = $('#overallBar');
 
-const footerActive = $('#footerActive');
-const footerCompleted = $('#footerCompleted');
 const footerSaved = $('#footerSaved');
 
 const dropOverlay = $('#dropOverlay');
@@ -492,18 +490,84 @@ $('#themeToggle').addEventListener('click', () => {
   applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
 });
 
+// ── Sidebar collapse ──
+let sidebarOpen = localStorage.getItem('fr_sidebar') !== 'closed';
+
+function applySidebar(open) {
+  sidebarOpen = !!open;
+  const bar = document.querySelector('.sidebar');
+  if (bar) bar.classList.toggle('collapsed', !sidebarOpen);
+  localStorage.setItem('fr_sidebar', sidebarOpen ? 'open' : 'closed');
+  const btn = $('#sidebarToggle');
+  if (btn) btn.title = sidebarOpen ? 'Hide sidebar' : 'Show sidebar';
+}
+applySidebar(sidebarOpen);
+$('#sidebarToggle').addEventListener('click', () => applySidebar(!sidebarOpen));
+
 // ── Job list view mode ──
 let listView = localStorage.getItem('fr_listView') === 'grid' ? 'grid' : 'list';
 
+// Grid layout brings its own padding and track template. Applying that to an empty list
+// nudges the "drop files here" placeholder up and down as you toggle, so the class only
+// goes on when there is actually something to lay out.
+function syncListViewClass() {
+  jobList.classList.toggle('grid', listView === 'grid' && jobs.length > 0);
+}
+
 function applyListView(mode) {
   listView = mode === 'grid' ? 'grid' : 'list';
-  jobList.classList.toggle('grid', listView === 'grid');
+  syncListViewClass();
   localStorage.setItem('fr_listView', listView);
   const label = $('#viewToggleLabel');
   const btn = $('#viewToggle');
   // The label names the view you would switch TO.
   if (label) label.textContent = listView === 'grid' ? 'List' : 'Grid';
   if (btn) btn.title = listView === 'grid' ? 'Switch to list view' : 'Switch to grid view';
+  if (typeof renderJobs === 'function') { try { renderJobs(); } catch {} }
+  ensurePosterThumbs().catch(e => dlog('warn', `Thumbnails failed: ${e}`));
+}
+
+// Grid cards show a poster frame. Pulled lazily, only in grid view, and kept on the job
+// so switching views or re-rendering never re-extracts one.
+const POSTER_WIDTH = 320;
+const POSTER_CONCURRENCY = 4;
+
+async function ensurePosterThumbs() {
+  if (listView !== 'grid') return;
+  const queue = jobs.filter(j => j.kind === 'video' && !j.thumb && !j.thumbPending);
+  if (queue.length === 0) return;
+  queue.forEach(j => { j.thumbPending = true; });
+
+  let next = 0;
+  const worker = async () => {
+    while (next < queue.length) {
+      if (listView !== 'grid') return;
+      const job = queue[next++];
+      try {
+        // A tenth of the way in, so the poster is not the black frame most clips open on.
+        const t = job.duration > 0 ? Math.min(job.duration * 0.1, 10) : 0;
+        job.thumb = await invoke('extract_single_frame', {
+          inputPath: job.inputPath,
+          timeSeconds: t,
+          width: POSTER_WIDTH,
+        });
+        paintThumb(job);
+      } catch (e) {
+        dlog('warn', `Thumbnail failed for ${job.filename}: ${e}`);
+      } finally {
+        job.thumbPending = false;
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(POSTER_CONCURRENCY, queue.length) }, worker)
+  );
+  jobs.forEach(j => { j.thumbPending = false; });
+}
+
+function paintThumb(job) {
+  const el = jobList.querySelector(`.dl-item[data-id="${job.id}"] .dl-thumb`);
+  if (el && job.thumb) el.innerHTML = `<img src="${job.thumb}" alt="" />`;
 }
 applyListView(listView);
 $('#viewToggle').addEventListener('click', () => {
@@ -1004,6 +1068,7 @@ async function addFileToQueue(filePath) {
   jobs.push(job);
   renderJobs();
   scheduleEstimates();
+  ensurePosterThumbs().catch(e => dlog('warn', `Thumbnails failed: ${e}`));
   dlog('event', `Added to queue: ${filename}`);
 }
 
@@ -1437,8 +1502,27 @@ clearCompletedBtn.addEventListener('click', async () => {
   renderJobs();
 });
 
+$('#removeAllBtn').addEventListener('click', async () => {
+  if (jobs.length === 0) return;
+  // Nothing is left to estimate, so drop any pass still walking the old queue.
+  stopEstimates();
+  for (const job of jobs) {
+    if (!job.serverId) continue;
+    // Anything still moving has to be stopped before the backend will let it go.
+    if (job.status === 'Queued' || job.status === 'Running') {
+      try { await invoke('cancel_conversion', { id: job.serverId }); } catch {}
+    }
+    try { await invoke('remove_conversion', { id: job.serverId }); } catch {}
+  }
+  const n = jobs.length;
+  jobs = [];
+  renderJobs();
+  dlog('event', `Removed all ${n} items from the list`);
+});
+
 // Render
 function renderJobs() {
+  syncListViewClass();
   if (jobs.length === 0) {
     emptyState.style.display = '';
     Array.from(jobList.children).forEach(c => { if (c !== emptyState) c.remove(); });
@@ -1518,7 +1602,14 @@ function renderJobHTML(job) {
        </div>`
     : '';
 
+  // Poster frame, grid view only. Renders the box straight away so the card keeps its
+  // shape while the frame is still being pulled.
+  const thumbBlock = (listView === 'grid' && job.kind === 'video')
+    ? `<div class="dl-thumb">${job.thumb ? `<img src="${job.thumb}" alt="" />` : ''}</div>`
+    : '';
+
   return `
+    ${thumbBlock}
     <div class="dl-row-top">
       <span class="dl-filename" title="${escapeHtml(job.inputPath)}">${escapeHtml(job.filename)}</span>
       <span class="dl-size">${sizeCellHTML(job)}</span>
@@ -2021,8 +2112,9 @@ function updateFooter() {
   const running = jobs.filter(j => j.status === 'Running').length;
   const queued = jobs.filter(j => j.status === 'Queued').length;
   const completed = jobs.filter(j => j.status === 'Completed').length;
-  footerActive.textContent = t('footer.running', { n: running }) + (queued > 0 ? ' / ' + t('footer.queued', { n: queued }) : '');
-  footerCompleted.textContent = t('footer.completed', { n: completed });
+  // Running / queued / completed counts live on the progress bar below the buttons,
+  // which is where you are already looking while a batch runs. Repeating them in the
+  // footer only made it read "0 running, 0 completed" for most of the app's life.
   const totalIn = jobs.reduce((a, j) => a + (j.status === 'Completed' ? j.inputSize : 0), 0);
   const totalOut = jobs.reduce((a, j) => a + (j.status === 'Completed' ? j.outputSize : 0), 0);
   if (totalIn > 0 && totalOut > 0) {
@@ -2439,6 +2531,13 @@ document.querySelectorAll('.copy-btn').forEach(btn => {
 
 // Init
 async function init() {
+  try {
+    const v = await invoke('app_version');
+    const el = $('#footerVersion');
+    if (el) el.textContent = `v${v}`;
+  } catch (e) {
+    dlog('warn', `Could not read app version: ${e}`);
+  }
   try {
     defaultOutputDir = await invoke('get_default_output_dir');
     if (!settings.outputDir) {

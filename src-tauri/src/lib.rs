@@ -27,6 +27,7 @@ pub fn run() {
             commands::generate_preview_video,
             commands::read_file_bytes,
             commands::estimate_output_size,
+            commands::app_version,
             commands::open_with_default_app,
         ])
         .run(tauri::generate_context!())
